@@ -3,7 +3,7 @@ use thiserror::Error;
 
 mod synergia_api;
 
-pub use synergia_api::{Error, SynergiaApi};
+pub use synergia_api::{Error as SynergiaError, SynergiaApi};
 
 #[derive(Error, Debug)]
 pub enum ResponseError {

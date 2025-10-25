@@ -59,7 +59,7 @@ impl SynergiaApi<UnauthorizedState> {
                     .cookie_store(true)
                     .user_agent(USER_AGENT)
                     .build()?,
-                base_url: Url::parse("api.librus.pl").unwrap(),
+                base_url: Url::parse("https://api.librus.pl").unwrap(),
             },
         })
     }
