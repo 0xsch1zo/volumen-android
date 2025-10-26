@@ -4,11 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 function App() {
-    const [greetMsg] = useState("");
+    const [greetMsg, setGreetMsg] = useState("");
     const [name, setName] = useState("");
 
     async function greet() {
-        await invoke("greet", { name });
+        setGreetMsg(await invoke("greet", { name }));
     }
 
     return (

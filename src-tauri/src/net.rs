@@ -1,9 +1,11 @@
 use reqwest::Response;
 use thiserror::Error;
 
+pub mod librus_api;
+mod scraper;
 mod synergia_api;
 
-pub use synergia_api::{Error as SynergiaError, SynergiaApi};
+//pub use synergia_api::{Error as SynergiaError, SynergiaApi};
 
 #[derive(Error, Debug)]
 pub enum ResponseError {

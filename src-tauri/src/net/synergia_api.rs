@@ -50,17 +50,17 @@ pub struct UnauthenticatedState {
     librus_api_url: Url,
 }
 
-pub struct LoggedInState {
-    cookkie_store: Arc<Jar>,
+pub struct AuthenticatedState {
+    cookie_store: Arc<Jar>,
     client: Client,
     synergia_url: Url,
     librus_api_url: Url,
 }
 
 impl ApiState for UnauthenticatedState {}
-impl ApiState for LoggedInState {}
+impl ApiState for AuthenticatedState {}
 
-pub struct SynergiaApi<S: ApiState> {
+pub struct SynergiaApi<S: ApiState = UnauthenticatedState> {
     state: S,
 }
 
@@ -130,7 +130,7 @@ impl SynergiaApi<UnauthenticatedState> {
         }
     }
 
-    pub async fn login(self, login: &str, pass: &str) -> Result<SynergiaApi<LoggedInState>> {
+    pub async fn login(self, login: &str, pass: &str) -> Result<SynergiaApi<AuthenticatedState>> {
         const AUTH_ENPOINT: &str = "/OAuth/Authorization?client_id=46"; // why 46 you may ask, ...
                                                                         // I don't know
         debug!("logging in to synergia");
@@ -158,12 +158,31 @@ impl SynergiaApi<UnauthenticatedState> {
 
         debug!("successfully logged in");
         Ok(SynergiaApi {
-            state: LoggedInState {
+            state: AuthenticatedState {
                 client: self.state.client,
-                cookkie_store: self.state.cookie_store,
+                cookie_store: self.state.cookie_store,
                 librus_api_url: self.state.librus_api_url,
                 synergia_url: self.state.synergia_url,
             },
         })
+    }
+}
+
+impl SynergiaApi<AuthenticatedState> {
+    pub async fn messages(&self) -> Result<String> {
+        const MESSAGES_ENDPOINT: &str = "/wiadomosci";
+        debug!("fetching messages");
+        let messages = self
+            .state
+            .client
+            .get(self.state.synergia_url.join(MESSAGES_ENDPOINT).unwrap())
+            .send()
+            .await?
+            .error_on_status()
+            .await?
+            .text()
+            .await?;
+        debug!("successfully fetched messages");
+        Ok(messages)
     }
 }
