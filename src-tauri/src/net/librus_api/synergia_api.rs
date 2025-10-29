@@ -6,10 +6,22 @@ use reqwest::{
     header::ToStrError,
     Client, Url,
 };
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::net::{self, ResponseExt};
+use crate::net::{
+    self,
+    librus_api::synergia_api::{
+        private_types::{LoginRequest, LoginResponse},
+        scraper::scrape_messages,
+    },
+    ResponseExt,
+};
+
+mod private_types;
+mod public_types;
+mod scraper;
+
+pub use public_types::{Message, Messages};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -23,23 +35,11 @@ pub enum Error {
     InvalidHeader(#[from] ToStrError),
     #[error("failed to acquire power cookies")]
     FailedToGetPowerCookies,
+    #[error("scraper error")]
+    ScraperError(#[from] scraper::Error),
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
-
-#[derive(Serialize, Deserialize)]
-struct LoginRequest {
-    action: String,
-    login: String,
-    pass: String,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LoginResponse {
-    status: String,
-    go_to: String,
-}
 
 pub trait ApiState {}
 
@@ -169,10 +169,10 @@ impl SynergiaApi<UnauthenticatedState> {
 }
 
 impl SynergiaApi<AuthenticatedState> {
-    pub async fn messages(&self) -> Result<String> {
+    pub async fn messages(&self) -> Result<Messages> {
         const MESSAGES_ENDPOINT: &str = "/wiadomosci";
         debug!("fetching messages");
-        let messages = self
+        let html = self
             .state
             .client
             .get(self.state.synergia_url.join(MESSAGES_ENDPOINT).unwrap())
@@ -183,6 +183,7 @@ impl SynergiaApi<AuthenticatedState> {
             .text()
             .await?;
         debug!("successfully fetched messages");
-        Ok(messages)
+
+        Ok(scrape_messages(&html)?)
     }
 }

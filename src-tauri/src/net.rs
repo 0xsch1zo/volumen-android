@@ -1,11 +1,7 @@
-use reqwest::Response;
+use reqwest::{Client, ClientBuilder, Response};
 use thiserror::Error;
 
 pub mod librus_api;
-mod scraper;
-mod synergia_api;
-
-//pub use synergia_api::{Error as SynergiaError, SynergiaApi};
 
 #[derive(Error, Debug)]
 pub enum ResponseError {
@@ -29,4 +25,11 @@ impl ResponseExt for Response {
             Ok(self)
         }
     }
+}
+
+fn default_client_options() -> ClientBuilder {
+    const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
+    Client::builder()
+        .connection_verbose(crate::is_debug())
+        .user_agent(USER_AGENT)
 }
