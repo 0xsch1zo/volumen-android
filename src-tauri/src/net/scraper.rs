@@ -20,30 +20,56 @@ pub enum MessageParseError {
     FullMessageLinkNotFound,
 }
 
-trait ExactlyNExt: Iterator {
-    fn take_exactly<T: FromIterator<Self::Item>>(
-        self,
-        n: usize,
-        on_surplus: impl Fn() -> (),
-    ) -> Option<T>;
+enum TakenElements<T> {
+    NotEnough,
+    Exact(T),
+    TooMuch(T),
 }
 
-impl<I: Iterator> ExactlyNExt for I {
-    fn take_exactly<T: FromIterator<I::Item>>(
-        mut self,
-        n: usize,
-        on_surplus: impl Fn() -> (),
-    ) -> Option<T> {
-        let collection = (0..n)
+impl<T> TakenElements<T> {
+    fn exact_or<E>(self, err: E) -> Result<T, E> {
+        match self {
+            Self::Exact(t) => Ok(t),
+            _ => Err(err),
+        }
+    }
+
+    fn enough_or<E>(self, err: E) -> Result<T, E> {
+        match self {
+            Self::NotEnough => Err(err),
+            Self::Exact(t) => Ok(t),
+            Self::TooMuch(t) => Ok(t),
+        }
+    }
+
+    fn inspect_surplus(self, f: impl FnOnce(&T) -> ()) -> Self {
+        match &self {
+            Self::TooMuch(t) => f(t),
+            _ => {}
+        }
+        self
+    }
+}
+
+trait ExactlyNext: Iterator {
+    fn take_exactly<T: FromIterator<Self::Item>>(self, n: usize) -> TakenElements<T>;
+}
+
+impl<I: Iterator> ExactlyNext for I {
+    fn take_exactly<T: FromIterator<Self::Item>>(mut self, n: usize) -> TakenElements<T> {
+        let Some(collection) = (0..n)
             .into_iter()
             .map(|_| self.next())
-            .collect::<Option<T>>();
+            .collect::<Option<T>>()
+        else {
+            return TakenElements::NotEnough;
+        };
 
         if self.next().is_some() {
-            on_surplus();
+            TakenElements::TooMuch(collection)
+        } else {
+            TakenElements::Exact(collection)
         }
-
-        collection
     }
 }
 
@@ -94,15 +120,17 @@ impl<'a> TryFrom<ElementRef<'a>> for Message {
             message_columns[i]
                 .text()
                 .filter(|s| !s.trim().is_empty())
-                .take_exactly::<Vec<&str>>(1, || warn!("{c:?} column text surplus"))
-                .ok_or(MessageParseError::TextNotFound(c))
+                .take_exactly::<Vec<&str>>(1)
+                .inspect_surplus(|_| warn!("{c:?} column text surplus"))
+                .enough_or(MessageParseError::TextNotFound(c))
         });
 
         let endpoint_hyperlink_selector = Selector::parse("a[href]").unwrap();
         let full_message_endpoint = message_columns[MessageColumns::Title as usize]
             .select(&endpoint_hyperlink_selector)
-            .take_exactly::<Vec<ElementRef>>(1, || warn!("full message link surplus"))
-            .ok_or(MessageParseError::FullMessageLinkNotFound)?
+            .take_exactly::<Vec<ElementRef>>(1)
+            .inspect_surplus(|_| warn!("full message link surplus"))
+            .enough_or(MessageParseError::FullMessageLinkNotFound)?
             .into_iter()
             .exactly_one()
             .unwrap()
@@ -114,7 +142,7 @@ impl<'a> TryFrom<ElementRef<'a>> for Message {
             full_message_endpoint,
             title: title?[0].to_owned(),
             sender: sender?[0].to_owned(),
-            date: date?[0].to_owned(),
+            date: date?[0].to_owned(), // get rid of this use lifetimes
         })
     }
 }
@@ -138,7 +166,7 @@ pub fn scrape_messages(messages_html: &str) -> Result<Messages, Error> {
     let container_fragment = document.select(&container_selector).next().unwrap();
     let messages: Vec<Message> = Vec::new();
 
-    debug!("successfully scraping messages");
+    debug!("successfully scraped messages");
 
     Ok(Messages {
         messages: container_fragment
