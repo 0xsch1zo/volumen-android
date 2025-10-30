@@ -4,12 +4,13 @@ use log::error;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::net::librus_api;
+use crate::net::synergia_api;
 
 #[derive(Error, Debug)]
 pub enum ApplicationError {
+    // shouldn't be handled here really
     #[error("a librus api error occured")]
-    LibrusApiError(#[from] librus_api::Error),
+    LibrusApiError(#[from] synergia_api::Error),
 }
 
 impl ApplicationError {

@@ -1,7 +1,7 @@
 use reqwest::{Client, ClientBuilder, Response};
 use thiserror::Error;
 
-pub mod librus_api;
+pub mod synergia_api;
 
 #[derive(Error, Debug)]
 pub enum ResponseError {

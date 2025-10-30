@@ -4,7 +4,7 @@ use log::LevelFilter;
 
 use crate::{
     application_error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt},
-    net::librus_api::LibrusApi,
+    net::synergia_api::SynergiaApi,
 };
 
 mod application_error;
@@ -24,16 +24,16 @@ const fn is_debug() -> bool {
 type Result<T, E = FrontendError> = std::result::Result<T, E>;
 
 #[tauri::command]
-async fn greet(name: String) -> Result<String> {
-    LibrusApi::with_authorized()
+async fn send(login: String, password: String) -> Result<String> {
+    SynergiaApi::with_authorized()
         .await
         .into_app_result()
         .log_on_err()?
-        .mobile_login("test", "test")
+        .login(&login, &password)
         .await
         .into_app_result()
         .log_on_err()?;
-    Ok(name)
+    Ok(login)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -48,7 +48,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![send])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

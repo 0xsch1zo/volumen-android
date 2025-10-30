@@ -10,18 +10,12 @@ use thiserror::Error;
 
 use crate::net::{
     self,
-    librus_api::synergia_api::{
-        private_types::{LoginRequest, LoginResponse},
-        scraper::scrape_messages,
-    },
+    synergia_api::private_types::{LoginRequest, LoginResponse},
     ResponseExt,
 };
 
 mod private_types;
 mod public_types;
-mod scraper;
-
-pub use public_types::{Message, Messages};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -35,8 +29,6 @@ pub enum Error {
     InvalidHeader(#[from] ToStrError),
     #[error("failed to acquire power cookies")]
     FailedToGetPowerCookies,
-    #[error("scraper error")]
-    ScraperError(#[from] scraper::Error),
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -66,11 +58,8 @@ pub struct SynergiaApi<S: ApiState = UnauthenticatedState> {
 
 impl SynergiaApi<UnauthenticatedState> {
     fn build_client(cookie_store: &Arc<Jar>) -> Result<Client> {
-        const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
-        Ok(Client::builder()
-            .connection_verbose(crate::is_debug())
+        Ok(net::default_client_options()
             .cookie_provider(Arc::clone(cookie_store))
-            .user_agent(USER_AGENT)
             .build()?)
     }
 
@@ -168,7 +157,8 @@ impl SynergiaApi<UnauthenticatedState> {
     }
 }
 
-impl SynergiaApi<AuthenticatedState> {
+// We're using the api of the new ui
+/*impl SynergiaApi<AuthenticatedState> {
     pub async fn messages(&self) -> Result<Messages> {
         const MESSAGES_ENDPOINT: &str = "/wiadomosci";
         debug!("fetching messages");
@@ -184,6 +174,6 @@ impl SynergiaApi<AuthenticatedState> {
             .await?;
         debug!("successfully fetched messages");
 
-        Ok(scrape_messages(&html)?)
+        todo!()
     }
-}
+}*/
