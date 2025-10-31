@@ -4,11 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 function App() {
-    const [greetMsg, setGreetMsg] = useState("");
-    const [name, setName] = useState("");
+    const [output, setOutput] = useState("");
+    const [login, setLogin] = useState("");
+    const [password, setPassword] = useState("");
 
-    async function greet() {
-        setGreetMsg(await invoke("greet", { name }));
+    async function send() {
+        setOutput(await invoke("send", { login, password }));
     }
 
     return (
@@ -32,17 +33,22 @@ function App() {
                 className="row"
                 onSubmit={(e) => {
                     e.preventDefault();
-                    greet();
+                    send();
                 }}
             >
                 <input
-                    id="greet-input"
-                    onChange={(e) => setName(e.currentTarget.value)}
-                    placeholder="Enter a name..."
+                    id="login-input"
+                    onChange={(e) => setLogin(e.currentTarget.value)}
+                    placeholder="Login..."
                 />
-                <button type="submit">Greet</button>
+                <input
+                    id="password-input"
+                    onChange={(e) => setPassword(e.currentTarget.value)}
+                    placeholder="Password..."
+                />
+                <button type="submit">Send</button>
             </form>
-            <p>{greetMsg}</p>
+            <p>{output}</p>
         </main>
     );
 }

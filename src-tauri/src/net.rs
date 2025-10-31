@@ -3,6 +3,8 @@ use thiserror::Error;
 
 pub mod synergia_api;
 
+pub use synergia_api::{Error as SynergiaApiError, SynergiaApi};
+
 #[derive(Error, Debug)]
 pub enum ResponseError {
     #[error("a response returned an error status code, with body: {0}")]
