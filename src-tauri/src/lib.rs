@@ -1,21 +1,19 @@
-use std::{
-    any::{self, Any, TypeId},
-    env,
-    fmt::Debug,
-};
+use std::env;
 
 use log::LevelFilter;
+use tauri::{async_runtime::Mutex, Manager, State};
 
 use crate::{
-    application_error::{
-        ApplicationError, ApplicationResultExt, FrontendError, LoggedApplicationResultExt,
+    error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt},
+    state::{
+        AppStates, AppStatesInner, AuthenticatedState, StateTranstionError, UnauthenticatedState,
     },
-    net::{synergia_api, SynergiaApi},
 };
 
-mod application_error;
 mod common;
+mod error;
 mod net;
+mod state;
 
 #[cfg(debug_assertions)]
 const fn is_debug() -> bool {
@@ -29,68 +27,23 @@ const fn is_debug() -> bool {
 
 type Result<T, E = FrontendError> = std::result::Result<T, E>;
 
-trait AppState: Debug + Any + 'static {}
-
-#[derive(Debug)]
-struct UnauthenticatedState {
-    synergia_api: SynergiaApi<synergia_api::UnauthenticatedState>,
-}
-
-#[derive(Debug)]
-struct AuthenticatedState {
-    synergia_api: SynergiaApi<synergia_api::AuthenticatedState>,
-}
-
-impl AppState for UnauthenticatedState {}
-impl AppState for AuthenticatedState {}
-
-struct AppStates(Option<Box<dyn AppState>>);
-
-impl AppStates {
-    async fn try_new() -> Result<Self> {
-        let state = Box::new(UnauthenticatedState {
-            synergia_api: SynergiaApi::with_authorized()
-                .await
-                .into_app_result()
-                .log_on_err()?,
-        });
-        Ok(Self(Some(state)))
-    }
-
-    fn as_state<S: AppState>(&self) -> Result<&S, ApplicationError> {
-        let state = self.0.as_ref().unwrap() as &dyn Any;
-        Ok(state
-            .downcast_ref()
-            .ok_or(ApplicationError::StateTypeProjectionError(
-                any::type_name::<S>().to_owned(),
-            ))?)
-    }
-
-    async fn state_transition<S: AppState, T: AppState>(
-        &mut self,
-        transformer: impl AsyncFnOnce(S) -> Result<T, ApplicationError>,
-    ) -> Result<(), ApplicationError> {
-        let type_wanted = any::type_name::<S>().to_owned();
-
-        let state = self.0.take().unwrap() as Box<dyn Any>;
-        let state = *state
-            .downcast::<S>()
-            .map_err(|_| ApplicationError::StateTypeProjectionError(type_wanted))?;
-
-        self.0 = Some(Box::new(transformer(state).await?));
-        Ok(())
-    }
-}
-
 #[tauri::command]
-async fn send(login: String, password: String) -> Result<String> {
-    SynergiaApi::with_authorized()
+async fn send(state: State<'_, AppStates>, login: String, password: String) -> Result<String> {
+    state
+        .lock()
         .await
-        .into_app_result()
-        .log_on_err()?
-        .login(&login, &password)
+        .state_transition::<UnauthenticatedState, AuthenticatedState>(async |s| {
+            Ok(AuthenticatedState {
+                synergia_api: s
+                    .synergia_api
+                    .clone()
+                    .login(&login, &password)
+                    .await
+                    .into_app_result()
+                    .map_err(|e| StateTranstionError::new(s, e))?,
+            })
+        })
         .await
-        .into_app_result()
         .log_on_err()?;
     Ok(login)
 }
@@ -106,6 +59,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let state = Mutex::new(AppStatesInner::try_new()?);
+            app.manage(state);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![send])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
