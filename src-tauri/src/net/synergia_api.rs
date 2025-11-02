@@ -1,34 +1,48 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, cell::LazyCell};
 
 use itertools::Itertools;
 use log::{debug, warn};
 use reqwest::{
-    cookie::Jar,
     header::{self, InvalidHeaderValue, ToStrError},
-    multipart,
     redirect::{Action, Attempt, Policy},
-    Client, Url,
+    Request, Response, StatusCode, Url,
 };
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use scraper::{Html, Selector};
-use tauri::http::{HeaderMap, HeaderValue};
+use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
+use tokio::sync::RwLockReadGuard;
 
 use crate::{
     common::TakeExactlyExt,
     net::{
         self,
-        synergia_api::private_types::{LoginAttrKinds, LoginAttrs, LoginRequest, Tokens},
-        ResponseExt,
+        synergia_api::{
+            private_types::{LoginAttrKinds, LoginAttrs, LoginRequest, UserId},
+            token_manager::{AuthCode, TokenManager, Tokens},
+        },
+        ErrorStatusMiddleware, IsSameBaseExt,
     },
 };
 
 mod private_types;
 mod public_types;
+mod token_manager;
+
+const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.librus.pl").unwrap());
+
+const SYNERGIA_URL: LazyCell<Url> =
+    LazyCell::new(|| Url::parse("https://synergia.librus.pl").unwrap());
+
+const LIBRUS_API_URL: LazyCell<Url> =
+    LazyCell::new(|| Url::parse("https://api.librus.pl").unwrap());
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("reqwest error")]
     ReqwestError(#[from] reqwest::Error),
+    #[error("reqwest error")]
+    ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
     #[error("url parsing error")]
     UrlParsingError(#[from] url::ParseError),
     #[error("response error")]
@@ -41,68 +55,164 @@ pub enum Error {
     AuthCodeNotFound,
     #[error("invalid header value")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
+    #[error("token manager error")]
+    TokenManagerError(#[from] token_manager::Error),
+    #[error("synergia account not found")]
+    SynergiaAccessTokenNotFound,
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+struct TokenPicker {
+    synergia_id: UserId,
+}
+
+impl TokenPicker {
+    fn new(synergia_id: UserId) -> Self {
+        Self { synergia_id }
+    }
+
+    fn pick(&self, url: &Url, tokens: &Tokens) -> Result<Option<String>> {
+        let managed_hosts = [
+            (PORTAL_URL, tokens.portal_token_pair.access_token.as_inner()),
+            (
+                SYNERGIA_URL,
+                tokens
+                    .synergia_tokens
+                    .inner()
+                    .get(&self.synergia_id)
+                    .ok_or(Error::SynergiaAccessTokenNotFound)?
+                    .as_inner(),
+            ),
+        ];
+
+        let Some(token) = managed_hosts
+            .into_iter()
+            .find(|other| url.is_same_base(&other.0))
+        else {
+            return Ok(None);
+        };
+        Ok(Some(token.1.to_owned()))
+    }
+}
+
+struct AuthorizationMiddleware {
+    token_manager: TokenManager,
+    token_picker: TokenPicker,
+}
+
+impl AuthorizationMiddleware {
+    fn new(token_manager: TokenManager, token_picker: TokenPicker) -> Self {
+        Self {
+            token_manager,
+            token_picker,
+        }
+    }
+
+    async fn add_auth_token_on_managed(&self, req: &mut Request) -> Result<()> {
+        let tokens = self.token_manager.get().await;
+        if let Some(token) = self.token_picker.pick(req.url(), &tokens)? {
+            req.headers_mut()
+                .insert(header::AUTHORIZATION, HeaderValue::from_str(&token)?);
+        }
+        Ok(())
+    }
+
+    async fn handle_unauthorized(
+        &self,
+        req: Request,
+        res: Response,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> Result<Response> {
+        let tokens_lock = self.token_manager.get().await;
+        let tokens = tokens_lock.clone();
+        drop(tokens_lock); // read lock ends here
+        let is_managed = self.token_picker.pick(req.url(), &tokens)?.is_some();
+        if is_managed && res.status() == StatusCode::UNAUTHORIZED {
+            self.token_manager
+                .refresh() // write lock acquire
+                .await?;
+            Ok(next.run(req, extensions).await?)
+        } else {
+            Ok(res)
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl Middleware for AuthorizationMiddleware {
+    async fn handle(
+        &self,
+        mut req: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> Result<Response, reqwest_middleware::Error> {
+        self.add_auth_token_on_managed(&mut req)
+            .await
+            .map_err(|e| reqwest_middleware::Error::middleware(e))?;
+
+        // https://github.com/TrueLayer/reqwest-middleware/blob/43d31fea66ba23774738d4518da2b4ad40fc346f/reqwest-retry/src/middleware.rs#L146-L149
+        // TLDR: this clone should be cheap
+        let Some(req_clone) = req.try_clone() else {
+            return next.run(req, extensions).await;
+        };
+
+        let res = next.clone().run(req_clone, extensions).await?;
+        let res = self
+            .handle_unauthorized(req, res, extensions, next)
+            .await
+            .map_err(|e| reqwest_middleware::Error::middleware(e))?;
+        Ok(res)
+    }
+}
 
 pub trait ApiState {}
 
 #[derive(Clone, Debug)]
 pub struct UnauthenticatedState {
-    client: Client,
-    synergia_url: Url,
-    portal_url: Url,
-    librus_api_url: Url,
+    client: ClientWithMiddleware,
 }
 
 impl UnauthenticatedState {
     fn try_new() -> Result<Self> {
         Ok(Self {
             client: Self::build_client()?,
-            synergia_url: Url::parse("https://synergia.librus.pl").unwrap(),
-            portal_url: Url::parse("https://portal.librus.pl").unwrap(),
-            librus_api_url: Url::parse("https://api.librus.pl").unwrap(),
         })
     }
-    fn build_client() -> Result<Client> {
-        Ok(net::default_client_options()
+    fn build_client() -> Result<ClientWithMiddleware> {
+        let reqwest_client = net::default_client_options()
             .redirect(Policy::custom(
                 SynergiaApi::<UnauthenticatedState>::redirect_policy,
             ))
             .cookie_store(true)
-            .build()?)
+            .build()?;
+
+        Ok(ClientBuilder::new(reqwest_client)
+            .with(ErrorStatusMiddleware)
+            .build())
     }
 }
+
 #[derive(Clone, Debug)]
 pub struct AuthenticatedState {
-    client: Client,
-    synergia_url: Url,
-    portal_url: Url,
-    librus_api_url: Url,
-    refresh_token: String,
+    client: ClientWithMiddleware,
 }
 
 impl AuthenticatedState {
-    fn try_from_tokens(tokens: Tokens) -> Result<Self> {
+    fn try_from_token_manager(token_manager: TokenManager) -> Result<Self> {
         Ok(Self {
-            client: Self::build_client(&tokens.access_token)?,
-            synergia_url: Url::parse("https://synergia.librus.pl").unwrap(),
-            portal_url: Url::parse("https://portal.librus.pl").unwrap(),
-            librus_api_url: Url::parse("https://api.librus.pl").unwrap(),
-            refresh_token: tokens.refresh_token,
+            client: Self::build_client(token_manager)?,
         })
     }
 
-    fn build_client(access_token: &str) -> Result<Client> {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {access_token}"))?,
-        );
-        Ok(net::default_client_options()
-            .cookie_store(true)
-            .default_headers(headers)
-            .build()?)
+    fn build_client(token_manager: TokenManager) -> Result<ClientWithMiddleware> {
+        let reqwest_client = net::default_client_options().cookie_store(true).build()?;
+
+        // TODO: add auth middleware
+        Ok(ClientBuilder::new(reqwest_client)
+            .with(ErrorStatusMiddleware)
+            .build())
     }
 }
 
@@ -185,10 +295,8 @@ impl SynergiaApi<UnauthenticatedState> {
         let html = self
             .state
             .client
-            .get(self.state.portal_url.join(ATTR_ENDPOINT).unwrap())
+            .get(PORTAL_URL.join(ATTR_ENDPOINT).unwrap())
             .send()
-            .await?
-            .error_on_status()
             .await?
             .text()
             .await?;
@@ -200,11 +308,9 @@ impl SynergiaApi<UnauthenticatedState> {
         let auth_code_response = self
             .state
             .client
-            .post(self.state.portal_url.join(LOGIN_ENDPOINT).unwrap())
+            .post(PORTAL_URL.join(LOGIN_ENDPOINT).unwrap())
             .form(req)
             .send()
-            .await?
-            .error_on_status()
             .await?;
 
         let location_url = auth_code_response
@@ -214,31 +320,6 @@ impl SynergiaApi<UnauthenticatedState> {
             .to_str()?;
 
         Ok(Self::extract_auth_code(&Url::parse(location_url)?).ok_or(Error::AuthCodeNotFound)?)
-    }
-
-    async fn fetch_tokens(&self, code: String) -> Result<Tokens> {
-        const ACCESS_TOKEN_ENDPOINT: &str = "/oauth2/access_token";
-        const CLIENT_ID: &str = "VaItV6oRutdo8fnjJwysnTjVlvaswf52ZqmXsJGP";
-
-        let form = multipart::Form::new()
-            .text("grant_type", "authorization_code")
-            .text("client_id", CLIENT_ID)
-            .text("redirect_uri", "app://librus")
-            .text("code", code);
-
-        let tokens = self
-            .state
-            .client
-            .post(self.state.portal_url.join(ACCESS_TOKEN_ENDPOINT).unwrap())
-            .multipart(form)
-            .send()
-            .await?
-            .error_on_status()
-            .await?
-            .json::<Tokens>()
-            .await?;
-
-        Ok(tokens)
     }
 
     pub async fn login(
@@ -257,18 +338,20 @@ impl SynergiaApi<UnauthenticatedState> {
             })
             .await?;
 
-        let tokens = self.fetch_tokens(auth_code).await?;
+        let token_manager = TokenManager::with_authorized(AuthCode::new(&auth_code)).await?;
         debug!("successfully logged in");
 
-        Ok(SynergiaApi::<AuthenticatedState>::try_from_tokens(tokens)?)
+        Ok(SynergiaApi::<AuthenticatedState>::try_from_token_manager(
+            token_manager,
+        )?)
     }
 }
 
 // We're using the api of the new ui
 impl SynergiaApi<AuthenticatedState> {
-    fn try_from_tokens(tokens: Tokens) -> Result<Self> {
+    fn try_from_token_manager(token_manager: TokenManager) -> Result<Self> {
         Ok(Self {
-            state: AuthenticatedState::try_from_tokens(tokens)?,
+            state: AuthenticatedState::try_from_token_manager(token_manager)?,
         })
     }
 }

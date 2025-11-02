@@ -1,9 +1,12 @@
-use reqwest::{Client, ClientBuilder, Response};
+use reqwest::{Client, ClientBuilder, Request, Response};
+use reqwest_middleware::{Middleware, Next};
+use tauri::http::Extensions;
 use thiserror::Error;
 
 pub mod synergia_api;
 
 pub use synergia_api::{Error as SynergiaApiError, SynergiaApi};
+use url::Url;
 
 #[derive(Error, Debug)]
 pub enum ResponseError {
@@ -26,6 +29,34 @@ impl ResponseExt for Response {
         } else {
             Ok(self)
         }
+    }
+}
+
+struct ErrorStatusMiddleware;
+
+#[async_trait::async_trait]
+impl Middleware for ErrorStatusMiddleware {
+    async fn handle(
+        &self,
+        req: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> Result<Response, reqwest_middleware::Error> {
+        let response = next.run(req, extensions).await?;
+        Ok(response
+            .error_on_status()
+            .await
+            .map_err(|e| reqwest_middleware::Error::middleware(e))?)
+    }
+}
+
+trait IsSameBaseExt {
+    fn is_same_base(&self, other: &Url) -> bool;
+}
+
+impl IsSameBaseExt for Url {
+    fn is_same_base(&self, other: &Url) -> bool {
+        self.has_host() && self.host() == other.host() && self.scheme() == other.scheme()
     }
 }
 
