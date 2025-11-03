@@ -1,14 +1,20 @@
 use std::{
     any::{self, Any},
     fmt::Debug,
+    sync::Arc,
 };
+
+use log::debug;
 
 use crate::{
     error::ApplicationError,
     net::{synergia_api, SynergiaApi},
 };
 
-pub trait AppState: Debug + Any + Send + Sync + 'static {}
+pub trait AppState: Debug + Any + Send + Sync + 'static {
+    // Necessary for the compiler to allow us to transform trait to any thanks to dynamic dispatch
+    fn as_any(&self) -> &dyn Any;
+}
 
 pub struct StateTranstionError<S: AppState> {
     state: S,
@@ -31,8 +37,16 @@ pub struct AuthenticatedState {
     pub synergia_api: SynergiaApi<synergia_api::AuthenticatedState>,
 }
 
-impl AppState for UnauthenticatedState {}
-impl AppState for AuthenticatedState {}
+impl AppState for UnauthenticatedState {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+impl AppState for AuthenticatedState {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 pub struct AppStatesInner(Option<Box<dyn AppState>>);
 
@@ -45,11 +59,14 @@ impl AppStatesInner {
     }
 
     pub fn as_state<S: AppState>(&self) -> Result<&S, ApplicationError> {
-        let state = self.0.as_ref().unwrap() as &dyn Any;
+        let state = self.0.as_ref().unwrap();
 
-        Ok(state.downcast_ref().ok_or(ApplicationError::WrongState(
-            any::type_name::<S>().to_owned(),
-        ))?)
+        Ok(state
+            .as_any()
+            .downcast_ref()
+            .ok_or(ApplicationError::WrongState(
+                any::type_name::<S>().to_owned(),
+            ))?)
     }
 
     pub async fn state_transition<S: AppState, T: AppState>(
@@ -59,12 +76,14 @@ impl AppStatesInner {
         let type_wanted = any::type_name::<S>().to_owned();
 
         let state = self.0.take().unwrap() as Box<dyn Any>;
+        //debug!("{}", any::type_name_of_val(&state));
         let state = *state
             .downcast::<S>()
             .map_err(|_| ApplicationError::WrongState(type_wanted))?;
 
         match transformer(state).await {
             Ok(s) => {
+                debug!("state swap");
                 self.0 = Some(Box::new(s));
             }
             Err(e) => {
