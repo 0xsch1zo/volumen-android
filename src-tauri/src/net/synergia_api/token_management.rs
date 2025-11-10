@@ -2,24 +2,25 @@ use reqwest::{multipart, Client};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
+use url::Url;
 
 use crate::net::{
     synergia_api::{
-        private_types::{PortalAccessToken, PortalRefreshToken, PortalTokenPair, SynergiaTokens},
-        PORTAL_URL, SYNERGIA_URL,
+        private_types::{
+            PortalAccessToken, PortalRefreshToken, PortalTokenPair, SynergiaTokens, SynergiaUserId,
+        },
+        LIBRUS_API_URL, PORTAL_URL, SYNERGIA_URL,
     },
-    ErrorStatusMiddleware,
+    ErrorStatusMiddleware, IsSameBaseExt,
 };
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum TokenManagerError {
     #[error("reqwest error")]
     ReqwestError(#[from] reqwest::Error),
     #[error("reqwest middleware error")]
     ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
 }
-
-type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[repr(transparent)]
 pub struct AuthCode<'a>(&'a str);
@@ -53,7 +54,7 @@ pub struct TokenManager {
 }
 
 impl TokenManager {
-    pub async fn with_authorized(code: AuthCode<'_>) -> Result<Self> {
+    pub async fn with_authorized(code: AuthCode<'_>) -> Result<Self, TokenManagerError> {
         let client = ClientBuilder::new(Client::new())
             .with(ErrorStatusMiddleware)
             .build();
@@ -75,7 +76,7 @@ impl TokenManager {
     }
 
     // this function ensures that token refreshes happen atomically
-    pub async fn refresh(&self) -> Result<()> {
+    pub async fn refresh(&self) -> Result<(), TokenManagerError> {
         let mut tokens = self.tokens.write().await;
 
         tokens.portal_token_pair = Self::fetch_portal_token(
@@ -95,7 +96,7 @@ impl TokenManager {
     async fn fetch_portal_token(
         client: &ClientWithMiddleware,
         grant: PortalGrant<'_>,
-    ) -> Result<PortalTokenPair> {
+    ) -> Result<PortalTokenPair, TokenManagerError> {
         const ACCESS_TOKEN_ENDPOINT: &str = "/oauth2/access_token";
         const CLIENT_ID: &str = "VaItV6oRutdo8fnjJwysnTjVlvaswf52ZqmXsJGP";
 
@@ -134,16 +135,55 @@ impl TokenManager {
     async fn fetch_synergia_tokens(
         client: &ClientWithMiddleware,
         portal_access_token: &PortalAccessToken,
-    ) -> Result<SynergiaTokens> {
+    ) -> Result<SynergiaTokens, TokenManagerError> {
         const SYNERGIA_ACCOUNT_ENDPOINT: &str = "/api/v3/SynergiaAccounts";
 
         let synergia_tokens = client
-            .get(SYNERGIA_URL.join(SYNERGIA_ACCOUNT_ENDPOINT).unwrap())
+            .get(PORTAL_URL.join(SYNERGIA_ACCOUNT_ENDPOINT).unwrap())
             .bearer_auth(portal_access_token.as_inner())
             .send()
             .await?
             .json::<SynergiaTokens>()
             .await?;
         Ok(synergia_tokens)
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum TokenPickerError {
+    #[error("synergia access token not found")]
+    SynergiaAccessTokenNotFound,
+}
+
+pub struct TokenPicker {
+    synergia_id: SynergiaUserId,
+}
+
+impl TokenPicker {
+    pub fn new(synergia_id: SynergiaUserId) -> Self {
+        Self { synergia_id }
+    }
+
+    pub fn pick(&self, url: &Url, tokens: &Tokens) -> Result<Option<String>, TokenPickerError> {
+        let synergia_token = tokens
+            .synergia_tokens
+            .inner()
+            .get(&self.synergia_id)
+            .ok_or(TokenPickerError::SynergiaAccessTokenNotFound)?
+            .as_inner();
+
+        let managed_hosts = [
+            (PORTAL_URL, tokens.portal_token_pair.access_token.as_inner()),
+            (SYNERGIA_URL, synergia_token),
+            (LIBRUS_API_URL, synergia_token),
+        ];
+
+        let Some(token) = managed_hosts
+            .into_iter()
+            .find(|other| url.is_same_base(&other.0))
+        else {
+            return Ok(None);
+        };
+        Ok(Some(token.1.to_owned()))
     }
 }

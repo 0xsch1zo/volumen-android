@@ -11,7 +11,7 @@ pub enum ApplicationError {
     // shouldn't be handled here really
     #[error("synergia api error occured")]
     SynergiaApiError(#[from] SynergiaApiError),
-    #[error("wanted to aquire wrong state")]
+    #[error("wanted to aquire wrong state: {0}")]
     WrongState(String),
 }
 

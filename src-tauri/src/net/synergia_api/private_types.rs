@@ -58,11 +58,11 @@ pub struct PortalTokenPair {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 #[serde(transparent)]
-pub struct UserId(usize);
+pub struct SynergiaUserId(usize);
 
-impl UserId {
-    fn inner(&self) -> usize {
-        self.0
+impl SynergiaUserId {
+    pub fn new(id: usize) -> Self {
+        Self(id)
     }
 }
 
@@ -78,8 +78,9 @@ impl SynergiaToken {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SynergiaAccount {
-    pub id: UserId,
+    pub id: SynergiaUserId,
     pub gruop: String,
     pub login: String,
     pub student_name: String,
@@ -87,23 +88,24 @@ pub struct SynergiaAccount {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SynergiaTokenEntry {
-    pub id: UserId,
+    pub id: SynergiaUserId,
     pub access_token: SynergiaToken,
 }
 
 #[derive(Serialize, Deserialize)]
 struct RawSynergiaTokens {
-    tokens: Vec<SynergiaTokenEntry>,
+    accounts: Vec<SynergiaTokenEntry>,
 }
 
 impl From<RawSynergiaTokens> for SynergiaTokens {
     fn from(value: RawSynergiaTokens) -> Self {
         let tokens = value
-            .tokens
+            .accounts
             .into_iter()
             .map(|entry| (entry.id, entry.access_token))
-            .collect::<HashMap<UserId, SynergiaToken>>();
+            .collect::<HashMap<SynergiaUserId, SynergiaToken>>();
         Self { inner: tokens }
     }
 }
@@ -111,11 +113,11 @@ impl From<RawSynergiaTokens> for SynergiaTokens {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(from = "RawSynergiaTokens")]
 pub struct SynergiaTokens {
-    inner: HashMap<UserId, SynergiaToken>,
+    inner: HashMap<SynergiaUserId, SynergiaToken>,
 }
 
 impl SynergiaTokens {
-    pub fn inner(&self) -> &HashMap<UserId, SynergiaToken> {
+    pub fn inner(&self) -> &HashMap<SynergiaUserId, SynergiaToken> {
         &self.inner
     }
 }

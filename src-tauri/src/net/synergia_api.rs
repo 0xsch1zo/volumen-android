@@ -3,31 +3,31 @@ use std::{borrow::Cow, cell::LazyCell};
 use itertools::Itertools;
 use log::{debug, warn};
 use reqwest::{
-    header::{self, InvalidHeaderValue, ToStrError},
+    header::{InvalidHeaderValue, ToStrError},
     redirect::{Action, Attempt, Policy},
-    Request, Response, StatusCode, Url,
+    Url,
 };
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use scraper::{Html, Selector};
-use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
-use tokio::sync::RwLockReadGuard;
 
 use crate::{
     common::TakeExactlyExt,
     net::{
         self,
         synergia_api::{
-            private_types::{LoginAttrKinds, LoginAttrs, LoginRequest, UserId},
-            token_manager::{AuthCode, TokenManager, Tokens},
+            auth_middleware::AuthorizationMiddleware,
+            private_types::{LoginAttrKinds, LoginAttrs, LoginRequest, SynergiaUserId},
+            token_management::{AuthCode, TokenManager, TokenManagerError, TokenPicker},
         },
-        ErrorStatusMiddleware, IsSameBaseExt,
+        ErrorStatusMiddleware,
     },
 };
 
+mod auth_middleware;
 mod private_types;
 mod public_types;
-mod token_manager;
+mod token_management;
 
 const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.librus.pl").unwrap());
 
@@ -55,117 +55,13 @@ pub enum Error {
     AuthCodeNotFound,
     #[error("invalid header value")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
-    #[error("token manager error")]
-    TokenManagerError(#[from] token_manager::Error),
-    #[error("synergia account not found")]
-    SynergiaAccessTokenNotFound,
+    #[error("failed to initalize token manager")]
+    TokenManagerInitFailed(#[from] TokenManagerError),
+    #[error("auth middleware error")]
+    AuthMiddlewareError(#[from] auth_middleware::Error),
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
-
-struct TokenPicker {
-    synergia_id: UserId,
-}
-
-impl TokenPicker {
-    fn new(synergia_id: UserId) -> Self {
-        Self { synergia_id }
-    }
-
-    fn pick(&self, url: &Url, tokens: &Tokens) -> Result<Option<String>> {
-        let managed_hosts = [
-            (PORTAL_URL, tokens.portal_token_pair.access_token.as_inner()),
-            (
-                SYNERGIA_URL,
-                tokens
-                    .synergia_tokens
-                    .inner()
-                    .get(&self.synergia_id)
-                    .ok_or(Error::SynergiaAccessTokenNotFound)?
-                    .as_inner(),
-            ),
-        ];
-
-        let Some(token) = managed_hosts
-            .into_iter()
-            .find(|other| url.is_same_base(&other.0))
-        else {
-            return Ok(None);
-        };
-        Ok(Some(token.1.to_owned()))
-    }
-}
-
-struct AuthorizationMiddleware {
-    token_manager: TokenManager,
-    token_picker: TokenPicker,
-}
-
-impl AuthorizationMiddleware {
-    fn new(token_manager: TokenManager, token_picker: TokenPicker) -> Self {
-        Self {
-            token_manager,
-            token_picker,
-        }
-    }
-
-    async fn add_auth_token_on_managed(&self, req: &mut Request) -> Result<()> {
-        let tokens = self.token_manager.get().await;
-        if let Some(token) = self.token_picker.pick(req.url(), &tokens)? {
-            req.headers_mut()
-                .insert(header::AUTHORIZATION, HeaderValue::from_str(&token)?);
-        }
-        Ok(())
-    }
-
-    async fn handle_unauthorized(
-        &self,
-        req: Request,
-        res: Response,
-        extensions: &mut Extensions,
-        next: Next<'_>,
-    ) -> Result<Response> {
-        let tokens_lock = self.token_manager.get().await;
-        let tokens = tokens_lock.clone();
-        drop(tokens_lock); // read lock ends here
-        let is_managed = self.token_picker.pick(req.url(), &tokens)?.is_some();
-        if is_managed && res.status() == StatusCode::UNAUTHORIZED {
-            self.token_manager
-                .refresh() // write lock acquire
-                .await?;
-            Ok(next.run(req, extensions).await?)
-        } else {
-            Ok(res)
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl Middleware for AuthorizationMiddleware {
-    async fn handle(
-        &self,
-        mut req: Request,
-        extensions: &mut Extensions,
-        next: Next<'_>,
-    ) -> Result<Response, reqwest_middleware::Error> {
-        self.add_auth_token_on_managed(&mut req)
-            .await
-            .map_err(|e| reqwest_middleware::Error::middleware(e))?;
-
-        // https://github.com/TrueLayer/reqwest-middleware/blob/43d31fea66ba23774738d4518da2b4ad40fc346f/reqwest-retry/src/middleware.rs#L146-L149
-        // TLDR: this clone should be cheap
-        let Some(req_clone) = req.try_clone() else {
-            return next.run(req, extensions).await;
-        };
-
-        let res = next.clone().run(req_clone, extensions).await?;
-        let res = self
-            .handle_unauthorized(req, res, extensions, next)
-            .await
-            .map_err(|e| reqwest_middleware::Error::middleware(e))?;
-        Ok(res)
-    }
-}
 
 pub trait ApiState {}
 
@@ -180,6 +76,7 @@ impl UnauthenticatedState {
             client: Self::build_client()?,
         })
     }
+
     fn build_client() -> Result<ClientWithMiddleware> {
         let reqwest_client = net::default_client_options()
             .redirect(Policy::custom(
@@ -200,18 +97,24 @@ pub struct AuthenticatedState {
 }
 
 impl AuthenticatedState {
-    fn try_from_token_manager(token_manager: TokenManager) -> Result<Self> {
+    fn try_from_token_management(
+        token_manager: TokenManager,
+        token_picker: TokenPicker,
+    ) -> Result<Self> {
         Ok(Self {
-            client: Self::build_client(token_manager)?,
+            client: Self::build_client(token_manager, token_picker)?,
         })
     }
 
-    fn build_client(token_manager: TokenManager) -> Result<ClientWithMiddleware> {
+    fn build_client(
+        token_manager: TokenManager,
+        token_picker: TokenPicker,
+    ) -> Result<ClientWithMiddleware> {
         let reqwest_client = net::default_client_options().cookie_store(true).build()?;
 
-        // TODO: add auth middleware
         Ok(ClientBuilder::new(reqwest_client)
             .with(ErrorStatusMiddleware)
+            .with(AuthorizationMiddleware::new(token_manager, token_picker))
             .build())
     }
 }
@@ -350,8 +253,23 @@ impl SynergiaApi<UnauthenticatedState> {
 // We're using the api of the new ui
 impl SynergiaApi<AuthenticatedState> {
     fn try_from_token_manager(token_manager: TokenManager) -> Result<Self> {
+        let picker = TokenPicker::new(SynergiaUserId::new(11111111));
         Ok(Self {
-            state: AuthenticatedState::try_from_token_manager(token_manager)?,
+            state: AuthenticatedState::try_from_token_management(token_manager, picker)?,
         })
+    }
+
+    pub async fn me(&self) -> Result<String> {
+        const ME_ENDPOINT: &str = "/3.0/Me";
+        let text = self
+            .state
+            .client
+            .get(LIBRUS_API_URL.join(ME_ENDPOINT).unwrap())
+            .header("accept", "application/json")
+            .send()
+            .await?
+            .text()
+            .await?;
+        Ok(text)
     }
 }

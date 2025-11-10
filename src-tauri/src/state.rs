@@ -1,10 +1,7 @@
 use std::{
     any::{self, Any},
     fmt::Debug,
-    sync::Arc,
 };
-
-use log::debug;
 
 use crate::{
     error::ApplicationError,
@@ -76,14 +73,12 @@ impl AppStatesInner {
         let type_wanted = any::type_name::<S>().to_owned();
 
         let state = self.0.take().unwrap() as Box<dyn Any>;
-        //debug!("{}", any::type_name_of_val(&state));
         let state = *state
             .downcast::<S>()
             .map_err(|_| ApplicationError::WrongState(type_wanted))?;
 
         match transformer(state).await {
             Ok(s) => {
-                debug!("state swap");
                 self.0 = Some(Box::new(s));
             }
             Err(e) => {
