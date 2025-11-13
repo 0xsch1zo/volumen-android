@@ -7,18 +7,16 @@ use reqwest_middleware::{Middleware, Next};
 use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
 
-use crate::net::synergia_api::token_management::{
-    TokenManager, TokenManagerError, TokenPicker, TokenPickerError,
+use crate::net::synergia_api::account_management::{
+    AccountManagementError, AccountManager, SelectedAccountState,
 };
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("reqwest middleware error")]
     ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
-    #[error("token picker error")]
-    TokenPickerError(#[from] TokenPickerError),
-    #[error("token manager error")]
-    TokenManagerError(#[from] TokenManagerError),
+    #[error("account management error")]
+    AccountManagementError(#[from] AccountManagementError),
     #[error("failed to insert auth header")]
     AuthHeaderInsertionFailure(#[from] InvalidHeaderValue),
 }
@@ -26,21 +24,16 @@ pub enum Error {
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct AuthorizationMiddleware {
-    token_manager: TokenManager,
-    token_picker: TokenPicker,
+    account_manager: AccountManager<SelectedAccountState>,
 }
 
 impl AuthorizationMiddleware {
-    pub fn new(token_manager: TokenManager, token_picker: TokenPicker) -> Self {
-        Self {
-            token_manager,
-            token_picker,
-        }
+    pub fn new(account_manager: AccountManager<SelectedAccountState>) -> Self {
+        Self { account_manager }
     }
 
     async fn add_auth_token_on_managed(&self, req: &mut Request) -> Result<()> {
-        let tokens = self.token_manager.get().await;
-        if let Some(token) = self.token_picker.pick(req.url(), &tokens)? {
+        if let Some(token) = self.account_manager.managed_token(req.url()).await? {
             req.headers_mut().insert(
                 header::AUTHORIZATION,
                 HeaderValue::from_str(&format!("Bearer {token}"))?,
@@ -56,15 +49,11 @@ impl AuthorizationMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> Result<Response> {
-        let tokens_lock = self.token_manager.get().await;
-        let tokens = tokens_lock.clone();
-        drop(tokens_lock); // read lock ends here
-
-        let is_managed = self.token_picker.pick(req.url(), &tokens)?.is_some();
-        debug!("{is_managed}");
-        if is_managed && res.status() == StatusCode::UNAUTHORIZED {
+        if self.account_manager.is_managed(req.url()).await?
+            && res.status() == StatusCode::UNAUTHORIZED
+        {
             debug!("refreshing!!!");
-            self.token_manager
+            self.account_manager
                 .refresh() // uses  write lock
                 .await?;
             self.add_auth_token_on_managed(&mut req).await?; // uses read lock

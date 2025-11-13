@@ -7,6 +7,7 @@ use crate::{
     error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt},
     state::{
         AppStates, AppStatesInner, AuthenticatedState, StateTranstionError, UnauthenticatedState,
+        UnselectedAccountState,
     },
 };
 
@@ -31,9 +32,9 @@ type Result<T, E = FrontendError> = std::result::Result<T, E>;
 async fn send(state: State<'_, AppStates>, login: String, password: String) -> Result<String> {
     let mut state_lock = state.lock().await;
     state_lock
-        .state_transition::<UnauthenticatedState, AuthenticatedState>(async |s| {
-            Ok(AuthenticatedState {
-                synergia_api: s
+        .state_transition::<UnauthenticatedState, UnselectedAccountState>(async |s| {
+            Ok(UnselectedAccountState {
+                account_manager: s
                     .synergia_api
                     .clone()
                     .login(&login, &password)

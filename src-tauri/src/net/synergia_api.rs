@@ -17,17 +17,20 @@ use crate::{
         self,
         synergia_api::{
             auth_middleware::AuthorizationMiddleware,
-            private_types::{LoginAttrKinds, LoginAttrs, LoginRequest, SynergiaUserId},
-            token_management::{AuthCode, TokenManager, TokenManagerError, TokenPicker},
+            private_types::{LoginAttrKinds, LoginAttrs, LoginRequest},
+            token_management::{AuthCode, TokenManager, TokenManagerError},
         },
         ErrorStatusMiddleware,
     },
 };
 
+mod account_management;
 mod auth_middleware;
 mod private_types;
 mod public_types;
 mod token_management;
+
+pub use account_management::{AccountManager, SelectedAccountState, UnselectedAccountState};
 
 const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.librus.pl").unwrap());
 
@@ -97,24 +100,22 @@ pub struct AuthenticatedState {
 }
 
 impl AuthenticatedState {
-    fn try_from_token_management(
-        token_manager: TokenManager,
-        token_picker: TokenPicker,
+    fn try_from_account_manager(
+        account_manager: AccountManager<SelectedAccountState>,
     ) -> Result<Self> {
         Ok(Self {
-            client: Self::build_client(token_manager, token_picker)?,
+            client: Self::build_client(account_manager)?,
         })
     }
 
     fn build_client(
-        token_manager: TokenManager,
-        token_picker: TokenPicker,
+        account_manager: AccountManager<SelectedAccountState>,
     ) -> Result<ClientWithMiddleware> {
         let reqwest_client = net::default_client_options().cookie_store(true).build()?;
 
         Ok(ClientBuilder::new(reqwest_client)
             .with(ErrorStatusMiddleware)
-            .with(AuthorizationMiddleware::new(token_manager, token_picker))
+            .with(AuthorizationMiddleware::new(account_manager))
             .build())
     }
 }
@@ -225,11 +226,7 @@ impl SynergiaApi<UnauthenticatedState> {
         Ok(Self::extract_auth_code(&Url::parse(location_url)?).ok_or(Error::AuthCodeNotFound)?)
     }
 
-    pub async fn login(
-        self,
-        email: &str,
-        password: &str,
-    ) -> Result<SynergiaApi<AuthenticatedState>> {
+    pub async fn login(self, email: &str, password: &str) -> Result<AccountManager> {
         debug!("logging in to librus");
         let attrs = self.fetch_login_attrs().await?;
 
@@ -244,18 +241,17 @@ impl SynergiaApi<UnauthenticatedState> {
         let token_manager = TokenManager::with_authorized(AuthCode::new(&auth_code)).await?;
         debug!("successfully logged in");
 
-        Ok(SynergiaApi::<AuthenticatedState>::try_from_token_manager(
-            token_manager,
-        )?)
+        Ok(AccountManager::new(token_manager))
     }
 }
 
 // We're using the api of the new ui
 impl SynergiaApi<AuthenticatedState> {
-    fn try_from_token_manager(token_manager: TokenManager) -> Result<Self> {
-        let picker = TokenPicker::new(SynergiaUserId::new(11111111));
+    fn try_from_account_manager(
+        account_manager: AccountManager<SelectedAccountState>,
+    ) -> Result<Self> {
         Ok(Self {
-            state: AuthenticatedState::try_from_token_management(token_manager, picker)?,
+            state: AuthenticatedState::try_from_account_manager(account_manager)?,
         })
     }
 

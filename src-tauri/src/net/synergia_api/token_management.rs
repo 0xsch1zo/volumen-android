@@ -48,6 +48,7 @@ pub struct Tokens {
     pub synergia_tokens: SynergiaTokens,
 }
 
+#[derive(Debug)]
 pub struct TokenManager {
     tokens: RwLock<Tokens>,
     client: ClientWithMiddleware,
@@ -155,6 +156,7 @@ pub enum TokenPickerError {
     SynergiaAccessTokenNotFound,
 }
 
+#[derive(Debug)]
 pub struct TokenPicker {
     synergia_id: SynergiaUserId,
 }

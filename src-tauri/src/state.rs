@@ -5,7 +5,10 @@ use std::{
 
 use crate::{
     error::ApplicationError,
-    net::{synergia_api, SynergiaApi},
+    net::{
+        synergia_api::{self, AccountManager},
+        SynergiaApi,
+    },
 };
 
 pub trait AppState: Debug + Any + Send + Sync + 'static {
@@ -30,6 +33,11 @@ pub struct UnauthenticatedState {
 }
 
 #[derive(Debug)]
+pub struct UnselectedAccountState {
+    pub account_manager: AccountManager,
+}
+
+#[derive(Debug)]
 pub struct AuthenticatedState {
     pub synergia_api: SynergiaApi<synergia_api::AuthenticatedState>,
 }
@@ -39,6 +47,13 @@ impl AppState for UnauthenticatedState {
         self
     }
 }
+
+impl AppState for UnselectedAccountState {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 impl AppState for AuthenticatedState {
     fn as_any(&self) -> &dyn Any {
         self
