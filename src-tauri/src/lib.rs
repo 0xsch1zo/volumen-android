@@ -5,9 +5,10 @@ use tauri::{async_runtime::Mutex, Manager, State};
 
 use crate::{
     error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt},
+    net::{synergia_api::AuthenticatedState as SynergiaApiAuthenticatedState, SynergiaApi},
     state::{
-        AppStates, AppStatesInner, AuthenticatedState, StateTranstionError, UnauthenticatedState,
-        UnselectedAccountState,
+        AppStates, AppStatesInner, AuthenticatedState, SelectedAccountState, StateTranstionError,
+        UnauthenticatedState, UnselectedAccountState,
     },
 };
 
@@ -48,16 +49,60 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .log_on_err()?;
 
     let state = state_lock
+        .as_state::<UnselectedAccountState>()
+        .into_app_result()
+        .log_on_err()?;
+
+    let accounts = state
+        .account_manager
+        .accounts()
+        .await
+        .into_app_result()
+        .log_on_err()?
+        .inner;
+
+    state_lock
+        .state_transition::<UnselectedAccountState, SelectedAccountState>(async |s| {
+            Ok(SelectedAccountState {
+                account_manager: s.account_manager.select(accounts[0].id),
+            })
+        })
+        .await
+        .into_app_result()
+        .log_on_err()?;
+
+    state_lock
+        .state_transition::<SelectedAccountState, AuthenticatedState>(async |s| {
+            Ok(AuthenticatedState {
+                synergia_api:
+                    SynergiaApi::<SynergiaApiAuthenticatedState>::try_from_account_manager(
+                        s.account_manager,
+                    )
+                    .map_err(|e| {
+                        StateTranstionError::new(
+                            SelectedAccountState {
+                                account_manager: e.account_manager,
+                            },
+                            e.error.into(),
+                        )
+                    })?,
+            })
+        })
+        .await
+        .into_app_result()
+        .log_on_err()?;
+
+    let state = state_lock
         .as_state::<AuthenticatedState>()
         .into_app_result()
         .log_on_err()?;
-    let text = state
+    let me = state
         .synergia_api
         .me()
         .await
         .into_app_result()
         .log_on_err()?;
-    Ok(text)
+    Ok(format!("{:?}", me))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

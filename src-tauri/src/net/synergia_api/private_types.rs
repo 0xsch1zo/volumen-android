@@ -60,12 +60,6 @@ pub struct PortalTokenPair {
 #[serde(transparent)]
 pub struct SynergiaUserId(usize);
 
-impl SynergiaUserId {
-    pub fn new(id: usize) -> Self {
-        Self(id)
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[repr(transparent)]
 #[serde(transparent)]
@@ -81,7 +75,7 @@ impl SynergiaToken {
 #[serde(rename_all = "camelCase")]
 pub struct SynergiaAccount {
     pub id: SynergiaUserId,
-    pub gruop: String,
+    pub group: String,
     pub login: String,
     pub student_name: String,
     pub state: String,
@@ -120,4 +114,11 @@ impl SynergiaTokens {
     pub fn inner(&self) -> &HashMap<SynergiaUserId, SynergiaToken> {
         &self.inner
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SynergiaAccounts {
+    #[serde(rename = "accounts")]
+    pub inner: Vec<SynergiaAccount>,
 }

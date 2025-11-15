@@ -8,7 +8,7 @@ use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
 
 use crate::net::synergia_api::account_management::{
-    AccountManagementError, AccountManager, SelectedAccountState,
+    AccountManager, AccountManagerError, SelectedAccountState,
 };
 
 #[derive(Error, Debug)]
@@ -16,7 +16,7 @@ pub enum Error {
     #[error("reqwest middleware error")]
     ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
     #[error("account management error")]
-    AccountManagementError(#[from] AccountManagementError),
+    AccountManagementError(#[from] AccountManagerError),
     #[error("failed to insert auth header")]
     AuthHeaderInsertionFailure(#[from] InvalidHeaderValue),
 }

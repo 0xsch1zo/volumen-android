@@ -16,6 +16,7 @@ use crate::{
     net::{
         self,
         synergia_api::{
+            account_management::{AccountManager, SelectedAccountState},
             auth_middleware::AuthorizationMiddleware,
             private_types::{LoginAttrKinds, LoginAttrs, LoginRequest},
             token_management::{AuthCode, TokenManager, TokenManagerError},
@@ -24,13 +25,11 @@ use crate::{
     },
 };
 
-mod account_management;
+pub mod account_management;
 mod auth_middleware;
 mod private_types;
 mod public_types;
 mod token_management;
-
-pub use account_management::{AccountManager, SelectedAccountState, UnselectedAccountState};
 
 const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.librus.pl").unwrap());
 
@@ -102,7 +101,7 @@ pub struct AuthenticatedState {
 impl AuthenticatedState {
     fn try_from_account_manager(
         account_manager: AccountManager<SelectedAccountState>,
-    ) -> Result<Self> {
+    ) -> Result<Self, AuthenticatedStateTransitionError> {
         Ok(Self {
             client: Self::build_client(account_manager)?,
         })
@@ -110,8 +109,16 @@ impl AuthenticatedState {
 
     fn build_client(
         account_manager: AccountManager<SelectedAccountState>,
-    ) -> Result<ClientWithMiddleware> {
-        let reqwest_client = net::default_client_options().cookie_store(true).build()?;
+    ) -> Result<ClientWithMiddleware, AuthenticatedStateTransitionError> {
+        let reqwest_client = match net::default_client_options().cookie_store(true).build() {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(AuthenticatedStateTransitionError {
+                    account_manager,
+                    error: e.into(),
+                })
+            }
+        };
 
         Ok(ClientBuilder::new(reqwest_client)
             .with(ErrorStatusMiddleware)
@@ -245,11 +252,16 @@ impl SynergiaApi<UnauthenticatedState> {
     }
 }
 
+pub struct AuthenticatedStateTransitionError {
+    pub account_manager: AccountManager<SelectedAccountState>,
+    pub error: Error,
+}
+
 // We're using the api of the new ui
 impl SynergiaApi<AuthenticatedState> {
-    fn try_from_account_manager(
+    pub fn try_from_account_manager(
         account_manager: AccountManager<SelectedAccountState>,
-    ) -> Result<Self> {
+    ) -> Result<Self, AuthenticatedStateTransitionError> {
         Ok(Self {
             state: AuthenticatedState::try_from_account_manager(account_manager)?,
         })

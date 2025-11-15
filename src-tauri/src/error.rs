@@ -4,13 +4,15 @@ use log::error;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::net::SynergiaApiError;
+use crate::net::{synergia_api::account_management::AccountManagerError, SynergiaApiError};
 
 #[derive(Error, Debug)]
 pub enum ApplicationError {
     // shouldn't be handled here really
     #[error("synergia api error occured")]
     SynergiaApiError(#[from] SynergiaApiError),
+    #[error("account manager error")]
+    AccountManagerError(#[from] AccountManagerError),
     #[error("wanted to aquire wrong state: {0}")]
     WrongState(String),
 }
