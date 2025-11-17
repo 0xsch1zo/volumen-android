@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::repositories::SynergiaUserId;
+
 #[derive(Debug)]
 pub enum LoginAttrKinds {
     RedirectTo,
@@ -55,11 +57,6 @@ pub struct PortalTokenPair {
     pub refresh_token: PortalRefreshToken,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-#[serde(transparent)]
-pub struct SynergiaUserId(usize);
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[repr(transparent)]
 #[serde(transparent)]
@@ -69,16 +66,6 @@ impl SynergiaToken {
     pub fn as_inner(&self) -> &str {
         &self.0
     }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct SynergiaAccount {
-    pub id: SynergiaUserId,
-    pub group: String,
-    pub login: String,
-    pub student_name: String,
-    pub state: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -114,11 +101,4 @@ impl SynergiaTokens {
     pub fn inner(&self) -> &HashMap<SynergiaUserId, SynergiaToken> {
         &self.inner
     }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct SynergiaAccounts {
-    #[serde(rename = "accounts")]
-    pub inner: Vec<SynergiaAccount>,
 }

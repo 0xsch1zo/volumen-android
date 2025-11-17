@@ -4,14 +4,17 @@ use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use url::Url;
 
-use crate::net::{
-    synergia_api::{
-        private_types::{
-            PortalAccessToken, PortalRefreshToken, PortalTokenPair, SynergiaTokens, SynergiaUserId,
+use crate::{
+    net::{
+        synergia_api::{
+            private_types::{
+                PortalAccessToken, PortalRefreshToken, PortalTokenPair, SynergiaTokens,
+            },
+            LIBRUS_API_URL, PORTAL_URL, SYNERGIA_URL,
         },
-        LIBRUS_API_URL, PORTAL_URL, SYNERGIA_URL,
+        ErrorStatusMiddleware, IsSameBaseExt,
     },
-    ErrorStatusMiddleware, IsSameBaseExt,
+    repositories::SynergiaUserId,
 };
 
 #[derive(Error, Debug)]

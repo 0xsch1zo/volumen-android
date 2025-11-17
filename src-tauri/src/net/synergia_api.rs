@@ -23,6 +23,7 @@ use crate::{
         },
         ErrorStatusMiddleware,
     },
+    repositories::ShallowGrades,
 };
 
 pub mod account_management;
@@ -65,6 +66,33 @@ pub enum Error {
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+pub struct StatefulApiError<S> {
+    pub error: Error,
+    pub state: S,
+}
+
+pub trait IntoStatefulApiErrorExt<S: Sized>: Sized {
+    fn into_stateful_err(self, state: S) -> StatefulApiError<S>;
+}
+
+impl<S, E: Into<Error>> IntoStatefulApiErrorExt<S> for E {
+    fn into_stateful_err(self, state: S) -> StatefulApiError<S> {
+        StatefulApiError {
+            error: self.into(),
+            state,
+        }
+    }
+}
+
+macro_rules! stateful_result {
+    ($state:expr => $res:expr) => {
+        match $res {
+            Ok(t) => t,
+            Err(e) => return Err(e.into_stateful_err($state)),
+        }
+    };
+}
+
 pub trait ApiState {}
 
 #[derive(Clone, Debug)]
@@ -101,7 +129,7 @@ pub struct AuthenticatedState {
 impl AuthenticatedState {
     fn try_from_account_manager(
         account_manager: AccountManager<SelectedAccountState>,
-    ) -> Result<Self, AuthenticatedStateTransitionError> {
+    ) -> Result<Self, StatefulApiError<AccountManager<SelectedAccountState>>> {
         Ok(Self {
             client: Self::build_client(account_manager)?,
         })
@@ -109,15 +137,9 @@ impl AuthenticatedState {
 
     fn build_client(
         account_manager: AccountManager<SelectedAccountState>,
-    ) -> Result<ClientWithMiddleware, AuthenticatedStateTransitionError> {
-        let reqwest_client = match net::default_client_options().cookie_store(true).build() {
-            Ok(c) => c,
-            Err(e) => {
-                return Err(AuthenticatedStateTransitionError {
-                    account_manager,
-                    error: e.into(),
-                })
-            }
+    ) -> Result<ClientWithMiddleware, StatefulApiError<AccountManager<SelectedAccountState>>> {
+        let reqwest_client = stateful_result! { account_manager =>
+            net::default_client_options().cookie_store(true).build()
         };
 
         Ok(ClientBuilder::new(reqwest_client)
@@ -233,42 +255,47 @@ impl SynergiaApi<UnauthenticatedState> {
         Ok(Self::extract_auth_code(&Url::parse(location_url)?).ok_or(Error::AuthCodeNotFound)?)
     }
 
-    pub async fn login(self, email: &str, password: &str) -> Result<AccountManager> {
+    pub async fn login(
+        self,
+        email: &str,
+        password: &str,
+    ) -> Result<AccountManager, StatefulApiError<Self>> {
         debug!("logging in to librus");
-        let attrs = self.fetch_login_attrs().await?;
+        let attrs = stateful_result! { self => self.fetch_login_attrs().await };
 
-        let auth_code = self
-            .fetch_auth_code(&LoginRequest {
-                email: email.to_owned(),
-                password: password.to_owned(),
-                attrs,
-            })
-            .await?;
+        let auth_code = stateful_result! { self =>
+            self
+                .fetch_auth_code(&LoginRequest {
+                    email: email.to_owned(),
+                    password: password.to_owned(),
+                    attrs,
+                })
+                .await
+        };
 
-        let token_manager = TokenManager::with_authorized(AuthCode::new(&auth_code)).await?;
+        let token_manager = stateful_result! { self =>
+            TokenManager::with_authorized(AuthCode::new(&auth_code)).await
+        };
         debug!("successfully logged in");
 
         Ok(AccountManager::new(token_manager))
     }
 }
 
-pub struct AuthenticatedStateTransitionError {
-    pub account_manager: AccountManager<SelectedAccountState>,
-    pub error: Error,
-}
-
 // We're using the api of the new ui
 impl SynergiaApi<AuthenticatedState> {
     pub fn try_from_account_manager(
         account_manager: AccountManager<SelectedAccountState>,
-    ) -> Result<Self, AuthenticatedStateTransitionError> {
+    ) -> Result<Self, StatefulApiError<AccountManager<SelectedAccountState>>> {
         Ok(Self {
             state: AuthenticatedState::try_from_account_manager(account_manager)?,
         })
     }
 
+    // TODO: actually properly parse the data or something
     pub async fn me(&self) -> Result<String> {
         const ME_ENDPOINT: &str = "/3.0/Me";
+        debug!("fetching \"me\" info");
         let text = self
             .state
             .client
@@ -278,6 +305,24 @@ impl SynergiaApi<AuthenticatedState> {
             .await?
             .text()
             .await?;
+        debug!("successfully fetched \"me\" info");
         Ok(text)
+    }
+
+    pub async fn grades(&self) -> Result<ShallowGrades> {
+        const GRADES_ENDPOINT: &str = "/gateway/api/2.0/Grades";
+        debug!("fetching grades");
+
+        let grades = self
+            .state
+            .client
+            .get(SYNERGIA_URL.join(GRADES_ENDPOINT)?)
+            .send()
+            .await?
+            .json::<ShallowGrades>()
+            .await?;
+
+        debug!("successfully fetched grades");
+        Ok(grades)
     }
 }

@@ -3,13 +3,15 @@ use reqwest_middleware::ClientBuilder;
 use thiserror::Error;
 use url::Url;
 
-use crate::net::{
-    synergia_api::{
-        private_types::{SynergiaAccounts, SynergiaUserId},
-        token_management::{TokenManager, TokenManagerError, TokenPicker, TokenPickerError},
-        PORTAL_URL,
+use crate::{
+    net::{
+        synergia_api::{
+            token_management::{TokenManager, TokenManagerError, TokenPicker, TokenPickerError},
+            PORTAL_URL,
+        },
+        ErrorStatusMiddleware,
     },
-    ErrorStatusMiddleware,
+    repositories::{SynergiaAccounts, SynergiaUserId},
 };
 
 #[derive(Error, Debug)]
