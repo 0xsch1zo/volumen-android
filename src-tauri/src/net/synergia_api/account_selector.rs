@@ -3,6 +3,7 @@ use reqwest_middleware::ClientBuilder;
 use thiserror::Error;
 
 use crate::{
+    error::StatefulResultExt,
     net::{
         synergia_api::{
             auth_manager::AuthorizationManager,
@@ -12,7 +13,6 @@ use crate::{
         ErrorStatusMiddleware, SynergiaApi,
     },
     repositories::{SynergiaAccounts, SynergiaUserId},
-    stateful_result,
 };
 
 #[derive(Error, Debug)]
@@ -44,14 +44,8 @@ impl AccountSelector {
         id: SynergiaUserId,
     ) -> Result<SynergiaApi<AuthenticatedState>, StatefulError<Self>> {
         let auth_manager = AuthorizationManager::new(self.token_manager, TokenPicker::new(id));
-        SynergiaApi::<AuthenticatedState>::try_from_auth_manager(auth_manager).map_err(|e| {
-            StatefulError::<Self> {
-                state: Self {
-                    token_manager: e.state.into(),
-                },
-                error: e.error,
-            }
-        })
+        SynergiaApi::<AuthenticatedState>::try_from_auth_manager(auth_manager)
+            .map_state(|s| Self::new(s.into()))
     }
 
     pub async fn accounts(&self) -> Result<SynergiaAccounts> {

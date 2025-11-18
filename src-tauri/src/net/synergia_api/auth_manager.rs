@@ -21,25 +21,24 @@ pub struct AuthorizationManager {
 }
 
 impl AuthorizationManager {
-    // fix this mess
-    pub(super) fn new(token_manager: TokenManager, token_picker: TokenPicker) -> Self {
+    pub fn new(token_manager: TokenManager, token_picker: TokenPicker) -> Self {
         Self {
             token_manager,
             token_picker,
         }
     }
 
-    pub(super) async fn managed_token(&self, url: &Url) -> Result<Option<String>> {
+    pub async fn managed_token(&self, url: &Url) -> Result<Option<String>> {
         let tokens = self.token_manager.get().await;
         Ok(self.token_picker.pick(url, &tokens)?)
     }
 
-    pub(super) async fn is_managed(&self, url: &Url) -> Result<bool> {
+    pub async fn is_managed(&self, url: &Url) -> Result<bool> {
         let tokens = self.token_manager.get().await;
         Ok(self.token_picker.pick(url, &tokens)?.is_some())
     }
 
-    pub(super) async fn refresh(&self) -> Result<()> {
+    pub async fn refresh(&self) -> Result<()> {
         Ok(self.token_manager.refresh().await?)
     }
 }

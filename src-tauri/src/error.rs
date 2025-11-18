@@ -96,6 +96,46 @@ impl<S, E, I: Into<E>> IntoStatefulErrorExt<S, E> for I {
     }
 }
 
+pub trait StatefulResultExt<T, S: Sized, E>: Sized {
+    fn map_state<F>(
+        self,
+        transformer: impl FnOnce(S) -> F,
+    ) -> std::result::Result<T, StatefulError<F, E>>;
+
+    fn map_stateful_error<F>(
+        self,
+        transformer: impl FnOnce(E) -> F,
+    ) -> std::result::Result<T, StatefulError<S, F>>;
+}
+
+impl<T, S: Sized, E> StatefulResultExt<T, S, E> for std::result::Result<T, StatefulError<S, E>> {
+    fn map_state<F>(
+        self,
+        transformer: impl FnOnce(S) -> F,
+    ) -> std::result::Result<T, StatefulError<F, E>> {
+        match self {
+            Ok(t) => Ok(t),
+            Err(e) => Err(StatefulError {
+                error: e.error,
+                state: transformer(e.state),
+            }),
+        }
+    }
+
+    fn map_stateful_error<F>(
+        self,
+        transformer: impl FnOnce(E) -> F,
+    ) -> std::result::Result<T, StatefulError<S, F>> {
+        match self {
+            Ok(t) => Ok(t),
+            Err(e) => Err(StatefulError {
+                error: transformer(e.error),
+                state: e.state,
+            }),
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! stateful_result {
     ($state:expr => $res:expr) => {

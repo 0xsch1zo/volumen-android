@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    error::ApplicationError,
+    error::{ApplicationError, StatefulError},
     net::{
         synergia_api::{self, account_selector::AccountSelector},
         SynergiaApi,
@@ -16,20 +16,15 @@ pub trait AppState: Debug + Any + Send + Sync + 'static {
     fn as_any(&self) -> &dyn Any;
 }
 
-pub struct StateTranstionError<S: AppState> {
-    state: S,
-    error: ApplicationError,
-}
-
-impl<S: AppState> StateTranstionError<S> {
-    pub fn new(state: S, error: ApplicationError) -> Self {
-        Self { state, error }
-    }
-}
-
 #[derive(Debug)]
 pub struct UnauthenticatedState {
     pub synergia_api: SynergiaApi<synergia_api::UnauthenticatedState>,
+}
+
+impl UnauthenticatedState {
+    pub fn new(synergia_api: SynergiaApi<synergia_api::UnauthenticatedState>) -> Self {
+        Self { synergia_api }
+    }
 }
 
 #[derive(Debug)]
@@ -37,9 +32,21 @@ pub struct AccountSelctionState {
     pub account_selector: AccountSelector,
 }
 
+impl AccountSelctionState {
+    pub fn new(account_selector: AccountSelector) -> Self {
+        Self { account_selector }
+    }
+}
+
 #[derive(Debug)]
 pub struct AuthenticatedState {
     pub synergia_api: SynergiaApi<synergia_api::AuthenticatedState>,
+}
+
+impl AuthenticatedState {
+    pub fn new(synergia_api: SynergiaApi<synergia_api::AuthenticatedState>) -> Self {
+        Self { synergia_api }
+    }
 }
 
 impl AppState for UnauthenticatedState {
@@ -83,7 +90,7 @@ impl AppStatesInner {
 
     pub async fn state_transition<S: AppState, T: AppState>(
         &mut self,
-        transformer: impl AsyncFnOnce(S) -> Result<T, StateTranstionError<S>>,
+        transformer: impl AsyncFnOnce(S) -> Result<T, StatefulError<S, ApplicationError>>,
     ) -> Result<(), ApplicationError> {
         let type_wanted = any::type_name::<S>().to_owned();
 

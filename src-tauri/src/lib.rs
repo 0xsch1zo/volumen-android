@@ -4,10 +4,9 @@ use log::LevelFilter;
 use tauri::{async_runtime::Mutex, Manager, State};
 
 use crate::{
-    error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt},
+    error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt, StatefulResultExt},
     state::{
-        AccountSelctionState, AppStates, AppStatesInner, AuthenticatedState, StateTranstionError,
-        UnauthenticatedState,
+        AccountSelctionState, AppStates, AppStatesInner, AuthenticatedState, UnauthenticatedState,
     },
 };
 
@@ -38,10 +37,10 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
             Ok(AccountSelctionState {
                 account_selector: s
                     .synergia_api
-                    .clone()
                     .login(&login, &password)
                     .await
-                    .map_err(|e| StateTranstionError::new(s, e.error.into()))?,
+                    .map_state(UnauthenticatedState::new)
+                    .map_stateful_error(Into::into)?,
             })
         })
         .await
@@ -64,14 +63,11 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
     state_lock
         .state_transition::<AccountSelctionState, AuthenticatedState>(async |s| {
             Ok(AuthenticatedState {
-                synergia_api: s.account_selector.select(accounts[0].id).map_err(|e| {
-                    StateTranstionError::new(
-                        AccountSelctionState {
-                            account_selector: e.state,
-                        },
-                        e.error.into(),
-                    )
-                })?,
+                synergia_api: s
+                    .account_selector
+                    .select(accounts[0].id)
+                    .map_state(AccountSelctionState::new)
+                    .map_stateful_error(Into::into)?,
             })
         })
         .await
