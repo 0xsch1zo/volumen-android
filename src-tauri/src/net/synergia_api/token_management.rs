@@ -14,7 +14,7 @@ use crate::{
         },
         ErrorStatusMiddleware, IsSameBaseExt,
     },
-    repositories::SynergiaUserId,
+    repositories::entities::SynergiaUserId,
 };
 
 #[derive(Error, Debug)]

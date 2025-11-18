@@ -4,15 +4,13 @@ use log::error;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::net::{synergia_api::account_selector::AccountSelectorError, SynergiaApiError};
+use crate::repositories;
 
 #[derive(Error, Debug)]
 pub enum ApplicationError {
     // shouldn't be handled here really
-    #[error("synergia api error occured")]
-    SynergiaApiError(#[from] SynergiaApiError),
-    #[error("account manager error")]
-    AccountSelectorError(#[from] AccountSelectorError),
+    #[error("repository error")]
+    RepoError(#[from] repositories::Error),
     #[error("wanted to aquire wrong state: {0}")]
     WrongState(String),
 }
@@ -97,19 +95,19 @@ impl<S, E, I: Into<E>> IntoStatefulErrorExt<S, E> for I {
 }
 
 pub trait StatefulResultExt<T, S: Sized, E>: Sized {
-    fn map_state<F>(
+    fn map_err_state<F>(
         self,
         transformer: impl FnOnce(S) -> F,
     ) -> std::result::Result<T, StatefulError<F, E>>;
 
-    fn map_stateful_error<F>(
+    fn map_stateful_err<F>(
         self,
         transformer: impl FnOnce(E) -> F,
     ) -> std::result::Result<T, StatefulError<S, F>>;
 }
 
 impl<T, S: Sized, E> StatefulResultExt<T, S, E> for std::result::Result<T, StatefulError<S, E>> {
-    fn map_state<F>(
+    fn map_err_state<F>(
         self,
         transformer: impl FnOnce(S) -> F,
     ) -> std::result::Result<T, StatefulError<F, E>> {
@@ -122,7 +120,7 @@ impl<T, S: Sized, E> StatefulResultExt<T, S, E> for std::result::Result<T, State
         }
     }
 
-    fn map_stateful_error<F>(
+    fn map_stateful_err<F>(
         self,
         transformer: impl FnOnce(E) -> F,
     ) -> std::result::Result<T, StatefulError<S, F>> {

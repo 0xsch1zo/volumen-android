@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::repositories::SynergiaUserId;
+use crate::repositories::entities::SynergiaUserId;
 
 #[derive(Debug)]
 pub enum LoginAttrKinds {

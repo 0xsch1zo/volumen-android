@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use crate::{
     common::TakeExactlyExt,
-    error::{self, IntoStatefulErrorExt},
+    error,
     net::{
         self,
         synergia_api::{
@@ -25,7 +25,7 @@ use crate::{
         },
         ErrorStatusMiddleware,
     },
-    repositories::ShallowGrades,
+    repositories::grades::ShallowGrades,
     stateful_result,
 };
 
@@ -73,7 +73,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 type StatefulError<S, E = Error> = error::StatefulError<S, E>;
 pub trait ApiState {}
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct UnauthenticatedState {
     client: ClientWithMiddleware,
 }
@@ -99,7 +99,7 @@ impl UnauthenticatedState {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct AuthenticatedState {
     client: ClientWithMiddleware,
 }
@@ -132,7 +132,7 @@ impl AuthenticatedState {
 impl ApiState for UnauthenticatedState {}
 impl ApiState for AuthenticatedState {}
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct SynergiaApi<S: ApiState = UnauthenticatedState> {
     state: S,
 }

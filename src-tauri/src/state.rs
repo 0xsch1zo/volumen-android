@@ -5,10 +5,7 @@ use std::{
 
 use crate::{
     error::{ApplicationError, StatefulError},
-    net::{
-        synergia_api::{self, account_selector::AccountSelector},
-        SynergiaApi,
-    },
+    repositories::{AccountSelectionRepository, LoginRepository, MainRepo},
 };
 
 pub trait AppState: Debug + Any + Send + Sync + 'static {
@@ -18,34 +15,36 @@ pub trait AppState: Debug + Any + Send + Sync + 'static {
 
 #[derive(Debug)]
 pub struct UnauthenticatedState {
-    pub synergia_api: SynergiaApi<synergia_api::UnauthenticatedState>,
+    pub login_repo: LoginRepository,
 }
 
 impl UnauthenticatedState {
-    pub fn new(synergia_api: SynergiaApi<synergia_api::UnauthenticatedState>) -> Self {
-        Self { synergia_api }
+    pub fn new(login_repo: LoginRepository) -> Self {
+        Self { login_repo }
     }
 }
 
 #[derive(Debug)]
-pub struct AccountSelctionState {
-    pub account_selector: AccountSelector,
+pub struct AccountSelectionState {
+    pub account_selection_repo: AccountSelectionRepository,
 }
 
-impl AccountSelctionState {
-    pub fn new(account_selector: AccountSelector) -> Self {
-        Self { account_selector }
+impl AccountSelectionState {
+    pub fn new(account_selection_repo: AccountSelectionRepository) -> Self {
+        Self {
+            account_selection_repo,
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct AuthenticatedState {
-    pub synergia_api: SynergiaApi<synergia_api::AuthenticatedState>,
+    pub main_repo: MainRepo,
 }
 
 impl AuthenticatedState {
-    pub fn new(synergia_api: SynergiaApi<synergia_api::AuthenticatedState>) -> Self {
-        Self { synergia_api }
+    pub fn new(main_repo: MainRepo) -> Self {
+        Self { main_repo }
     }
 }
 
@@ -55,7 +54,7 @@ impl AppState for UnauthenticatedState {
     }
 }
 
-impl AppState for AccountSelctionState {
+impl AppState for AccountSelectionState {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -71,9 +70,7 @@ pub struct AppStatesInner(Option<Box<dyn AppState>>);
 
 impl AppStatesInner {
     pub fn try_new() -> Result<Self, ApplicationError> {
-        let state = Box::new(UnauthenticatedState {
-            synergia_api: SynergiaApi::try_new()?,
-        });
+        let state = Box::new(UnauthenticatedState::new(LoginRepository::try_new()?));
         Ok(Self(Some(state)))
     }
 

@@ -12,7 +12,7 @@ use crate::{
         },
         ErrorStatusMiddleware, SynergiaApi,
     },
-    repositories::{SynergiaAccounts, SynergiaUserId},
+    repositories::entities::{SynergiaAccounts, SynergiaUserId},
 };
 
 #[derive(Error, Debug)]
@@ -45,7 +45,7 @@ impl AccountSelector {
     ) -> Result<SynergiaApi<AuthenticatedState>, StatefulError<Self>> {
         let auth_manager = AuthorizationManager::new(self.token_manager, TokenPicker::new(id));
         SynergiaApi::<AuthenticatedState>::try_from_auth_manager(auth_manager)
-            .map_state(|s| Self::new(s.into()))
+            .map_err_state(|s| Self::new(s.into()))
     }
 
     pub async fn accounts(&self) -> Result<SynergiaAccounts> {
