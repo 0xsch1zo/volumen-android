@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use log::debug;
 use reqwest::{
     header::{self, InvalidHeaderValue},
@@ -7,16 +9,14 @@ use reqwest_middleware::{Middleware, Next};
 use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
 
-use crate::net::synergia_api::account_management::{
-    AccountManager, AccountManagerError, SelectedAccountState,
-};
+use crate::net::synergia_api::auth_manager::{AuthorizationManager, AuthorizationManagerError};
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("reqwest middleware error")]
     ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
     #[error("account management error")]
-    AccountManagementError(#[from] AccountManagerError),
+    AuthorizationManagerError(#[from] AuthorizationManagerError),
     #[error("failed to insert auth header")]
     AuthHeaderInsertionFailure(#[from] InvalidHeaderValue),
 }
@@ -24,16 +24,18 @@ pub enum Error {
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct AuthorizationMiddleware {
-    account_manager: AccountManager<SelectedAccountState>,
+    authorization_manager: Arc<AuthorizationManager>,
 }
 
 impl AuthorizationMiddleware {
-    pub fn new(account_manager: AccountManager<SelectedAccountState>) -> Self {
-        Self { account_manager }
+    pub fn new(authorization_manager: Arc<AuthorizationManager>) -> Self {
+        Self {
+            authorization_manager,
+        }
     }
 
     async fn add_auth_token_on_managed(&self, req: &mut Request) -> Result<()> {
-        if let Some(token) = self.account_manager.managed_token(req.url()).await? {
+        if let Some(token) = self.authorization_manager.managed_token(req.url()).await? {
             req.headers_mut().insert(
                 header::AUTHORIZATION,
                 HeaderValue::from_str(&format!("Bearer {token}"))?,
@@ -49,11 +51,11 @@ impl AuthorizationMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> Result<Response> {
-        if self.account_manager.is_managed(req.url()).await?
+        if self.authorization_manager.is_managed(req.url()).await?
             && res.status() == StatusCode::UNAUTHORIZED
         {
             debug!("refreshing!!!");
-            self.account_manager
+            self.authorization_manager
                 .refresh() // uses  write lock
                 .await?;
             self.add_auth_token_on_managed(&mut req).await?; // uses read lock

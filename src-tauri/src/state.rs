@@ -6,10 +6,7 @@ use std::{
 use crate::{
     error::ApplicationError,
     net::{
-        synergia_api::{
-            self,
-            account_management::{AccountManager, SelectedAccountState as AccountMgrSelectedState},
-        },
+        synergia_api::{self, account_selector::AccountSelector},
         SynergiaApi,
     },
 };
@@ -36,13 +33,8 @@ pub struct UnauthenticatedState {
 }
 
 #[derive(Debug)]
-pub struct UnselectedAccountState {
-    pub account_manager: AccountManager,
-}
-
-#[derive(Debug)]
-pub struct SelectedAccountState {
-    pub account_manager: AccountManager<AccountMgrSelectedState>,
+pub struct AccountSelctionState {
+    pub account_selector: AccountSelector,
 }
 
 #[derive(Debug)]
@@ -56,13 +48,7 @@ impl AppState for UnauthenticatedState {
     }
 }
 
-impl AppState for UnselectedAccountState {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl AppState for SelectedAccountState {
+impl AppState for AccountSelctionState {
     fn as_any(&self) -> &dyn Any {
         self
     }

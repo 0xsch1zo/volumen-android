@@ -4,7 +4,7 @@ use log::error;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::net::{synergia_api::account_management::AccountManagerError, SynergiaApiError};
+use crate::net::{synergia_api::account_selector::AccountSelectorError, SynergiaApiError};
 
 #[derive(Error, Debug)]
 pub enum ApplicationError {
@@ -12,7 +12,7 @@ pub enum ApplicationError {
     #[error("synergia api error occured")]
     SynergiaApiError(#[from] SynergiaApiError),
     #[error("account manager error")]
-    AccountManagerError(#[from] AccountManagerError),
+    AccountSelectorError(#[from] AccountSelectorError),
     #[error("wanted to aquire wrong state: {0}")]
     WrongState(String),
 }
@@ -76,4 +76,36 @@ impl From<LoggedApplicationError> for FrontendError {
             code: format!("{:?}", value.0),
         }
     }
+}
+
+pub struct StatefulError<S, E> {
+    pub error: E,
+    pub state: S,
+}
+
+pub trait IntoStatefulErrorExt<S: Sized, E>: Sized {
+    fn into_stateful_err(self, state: S) -> StatefulError<S, E>;
+}
+
+impl<S, E, I: Into<E>> IntoStatefulErrorExt<S, E> for I {
+    fn into_stateful_err(self, state: S) -> StatefulError<S, E> {
+        StatefulError {
+            error: self.into(),
+            state,
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! stateful_result {
+    ($state:expr => $res:expr) => {
+        match $res {
+            Ok(t) => t,
+            Err(e) => {
+                return Err(
+                    <_ as crate::error::IntoStatefulErrorExt<_, _>>::into_stateful_err(e, $state),
+                )
+            }
+        }
+    };
 }

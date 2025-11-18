@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::LazyCell};
+use std::{borrow::Cow, cell::LazyCell, sync::Arc};
 
 use itertools::Itertools;
 use log::{debug, warn};
@@ -13,10 +13,12 @@ use thiserror::Error;
 
 use crate::{
     common::TakeExactlyExt,
+    error::{self, IntoStatefulErrorExt},
     net::{
         self,
         synergia_api::{
-            account_management::{AccountManager, SelectedAccountState},
+            account_selector::AccountSelector,
+            auth_manager::AuthorizationManager,
             auth_middleware::AuthorizationMiddleware,
             private_types::{LoginAttrKinds, LoginAttrs, LoginRequest},
             token_management::{AuthCode, TokenManager, TokenManagerError},
@@ -24,9 +26,11 @@ use crate::{
         ErrorStatusMiddleware,
     },
     repositories::ShallowGrades,
+    stateful_result,
 };
 
-pub mod account_management;
+pub mod account_selector;
+mod auth_manager;
 mod auth_middleware;
 mod private_types;
 mod public_types;
@@ -66,33 +70,7 @@ pub enum Error {
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub struct StatefulApiError<S> {
-    pub error: Error,
-    pub state: S,
-}
-
-pub trait IntoStatefulApiErrorExt<S: Sized>: Sized {
-    fn into_stateful_err(self, state: S) -> StatefulApiError<S>;
-}
-
-impl<S, E: Into<Error>> IntoStatefulApiErrorExt<S> for E {
-    fn into_stateful_err(self, state: S) -> StatefulApiError<S> {
-        StatefulApiError {
-            error: self.into(),
-            state,
-        }
-    }
-}
-
-macro_rules! stateful_result {
-    ($state:expr => $res:expr) => {
-        match $res {
-            Ok(t) => t,
-            Err(e) => return Err(e.into_stateful_err($state)),
-        }
-    };
-}
-
+type StatefulError<S, E = Error> = error::StatefulError<S, E>;
 pub trait ApiState {}
 
 #[derive(Clone, Debug)]
@@ -127,24 +105,26 @@ pub struct AuthenticatedState {
 }
 
 impl AuthenticatedState {
-    fn try_from_account_manager(
-        account_manager: AccountManager<SelectedAccountState>,
-    ) -> Result<Self, StatefulApiError<AccountManager<SelectedAccountState>>> {
+    fn try_from_auth_manager(
+        authorization_manager: AuthorizationManager,
+    ) -> Result<Self, StatefulError<AuthorizationManager>> {
         Ok(Self {
-            client: Self::build_client(account_manager)?,
+            client: Self::build_client(authorization_manager)?,
         })
     }
 
     fn build_client(
-        account_manager: AccountManager<SelectedAccountState>,
-    ) -> Result<ClientWithMiddleware, StatefulApiError<AccountManager<SelectedAccountState>>> {
-        let reqwest_client = stateful_result! { account_manager =>
+        authorization_manager: AuthorizationManager,
+    ) -> Result<ClientWithMiddleware, StatefulError<AuthorizationManager>> {
+        let reqwest_client = stateful_result! { authorization_manager =>
             net::default_client_options().cookie_store(true).build()
         };
 
         Ok(ClientBuilder::new(reqwest_client)
             .with(ErrorStatusMiddleware)
-            .with(AuthorizationMiddleware::new(account_manager))
+            .with(AuthorizationMiddleware::new(Arc::new(
+                authorization_manager,
+            )))
             .build())
     }
 }
@@ -259,7 +239,7 @@ impl SynergiaApi<UnauthenticatedState> {
         self,
         email: &str,
         password: &str,
-    ) -> Result<AccountManager, StatefulApiError<Self>> {
+    ) -> Result<AccountSelector, StatefulError<Self>> {
         debug!("logging in to librus");
         let attrs = stateful_result! { self => self.fetch_login_attrs().await };
 
@@ -278,17 +258,17 @@ impl SynergiaApi<UnauthenticatedState> {
         };
         debug!("successfully logged in");
 
-        Ok(AccountManager::new(token_manager))
+        Ok(AccountSelector::new(token_manager))
     }
 }
 
 // We're using the api of the new ui
 impl SynergiaApi<AuthenticatedState> {
-    pub fn try_from_account_manager(
-        account_manager: AccountManager<SelectedAccountState>,
-    ) -> Result<Self, StatefulApiError<AccountManager<SelectedAccountState>>> {
+    fn try_from_auth_manager(
+        authorization_manager: AuthorizationManager,
+    ) -> Result<Self, StatefulError<AuthorizationManager>> {
         Ok(Self {
-            state: AuthenticatedState::try_from_account_manager(account_manager)?,
+            state: AuthenticatedState::try_from_auth_manager(authorization_manager)?,
         })
     }
 

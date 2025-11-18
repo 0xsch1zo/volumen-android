@@ -5,16 +5,17 @@ use tauri::{async_runtime::Mutex, Manager, State};
 
 use crate::{
     error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt},
-    net::{synergia_api::AuthenticatedState as SynergiaApiAuthenticatedState, SynergiaApi},
     state::{
-        AppStates, AppStatesInner, AuthenticatedState, SelectedAccountState, StateTranstionError,
-        UnauthenticatedState, UnselectedAccountState,
+        AccountSelctionState, AppStates, AppStatesInner, AuthenticatedState, StateTranstionError,
+        UnauthenticatedState,
     },
 };
 
+mod cache;
 mod common;
 mod error;
 mod net;
+mod repositories;
 mod state;
 
 #[cfg(debug_assertions)]
@@ -33,15 +34,14 @@ type Result<T, E = FrontendError> = std::result::Result<T, E>;
 async fn send(state: State<'_, AppStates>, login: String, password: String) -> Result<String> {
     let mut state_lock = state.lock().await;
     state_lock
-        .state_transition::<UnauthenticatedState, UnselectedAccountState>(async |s| {
-            Ok(UnselectedAccountState {
-                account_manager: s
+        .state_transition::<UnauthenticatedState, AccountSelctionState>(async |s| {
+            Ok(AccountSelctionState {
+                account_selector: s
                     .synergia_api
                     .clone()
                     .login(&login, &password)
                     .await
-                    .into_app_result()
-                    .map_err(|e| StateTranstionError::new(s, e))?,
+                    .map_err(|e| StateTranstionError::new(s, e.error.into()))?,
             })
         })
         .await
@@ -49,12 +49,12 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .log_on_err()?;
 
     let state = state_lock
-        .as_state::<UnselectedAccountState>()
+        .as_state::<AccountSelctionState>()
         .into_app_result()
         .log_on_err()?;
 
     let accounts = state
-        .account_manager
+        .account_selector
         .accounts()
         .await
         .into_app_result()
@@ -62,30 +62,16 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .inner;
 
     state_lock
-        .state_transition::<UnselectedAccountState, SelectedAccountState>(async |s| {
-            Ok(SelectedAccountState {
-                account_manager: s.account_manager.select(accounts[0].id),
-            })
-        })
-        .await
-        .into_app_result()
-        .log_on_err()?;
-
-    state_lock
-        .state_transition::<SelectedAccountState, AuthenticatedState>(async |s| {
+        .state_transition::<AccountSelctionState, AuthenticatedState>(async |s| {
             Ok(AuthenticatedState {
-                synergia_api:
-                    SynergiaApi::<SynergiaApiAuthenticatedState>::try_from_account_manager(
-                        s.account_manager,
+                synergia_api: s.account_selector.select(accounts[0].id).map_err(|e| {
+                    StateTranstionError::new(
+                        AccountSelctionState {
+                            account_selector: e.state,
+                        },
+                        e.error.into(),
                     )
-                    .map_err(|e| {
-                        StateTranstionError::new(
-                            SelectedAccountState {
-                                account_manager: e.account_manager,
-                            },
-                            e.error.into(),
-                        )
-                    })?,
+                })?,
             })
         })
         .await
