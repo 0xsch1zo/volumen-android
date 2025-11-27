@@ -20,7 +20,7 @@ use crate::{
             account_selector::AccountSelector,
             auth_manager::AuthorizationManager,
             auth_middleware::AuthorizationMiddleware,
-            private_types::{LoginAttrKinds, LoginAttrs, LoginRequest},
+            internal_types::{LoginAttrKinds, LoginAttrs, LoginRequest},
             token_management::{AuthCode, TokenManager, TokenManagerError},
         },
         ErrorStatusMiddleware,
@@ -32,8 +32,7 @@ use crate::{
 pub mod account_selector;
 mod auth_manager;
 mod auth_middleware;
-mod private_types;
-mod public_types;
+mod internal_types;
 mod token_management;
 
 const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.librus.pl").unwrap());

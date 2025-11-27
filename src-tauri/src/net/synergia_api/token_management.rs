@@ -7,7 +7,7 @@ use url::Url;
 use crate::{
     net::{
         synergia_api::{
-            private_types::{
+            internal_types::{
                 PortalAccessToken, PortalRefreshToken, PortalTokenPair, SynergiaTokens,
             },
             LIBRUS_API_URL, PORTAL_URL, SYNERGIA_URL,
