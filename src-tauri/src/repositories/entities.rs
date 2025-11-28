@@ -25,52 +25,7 @@ pub struct SynergiaAccounts {
 // Generic reference used for internal purposes
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
-struct Reference {
-    id: usize,
-    url: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct LessonId(usize);
-
-impl From<Reference> for LessonId {
-    fn from(value: Reference) -> Self {
-        Self(value.id)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SubjectId(usize);
-
-impl From<Reference> for SubjectId {
-    fn from(value: Reference) -> Self {
-        Self(value.id)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct StudentId(usize);
-
-impl From<Reference> for StudentId {
-    fn from(value: Reference) -> Self {
-        Self(value.id)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CategoryId(usize);
-
-impl From<Reference> for CategoryId {
-    fn from(value: Reference) -> Self {
-        Self(value.id)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct UserId(usize);
-
-impl From<Reference> for UserId {
-    fn from(value: Reference) -> Self {
-        Self(value.id)
-    }
+pub struct Reference {
+    pub id: usize,
+    pub url: String,
 }
