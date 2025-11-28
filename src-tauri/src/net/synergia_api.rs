@@ -9,6 +9,7 @@ use reqwest::{
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use scraper::{Html, Selector};
+use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 use crate::{
@@ -25,7 +26,9 @@ use crate::{
         },
         ErrorStatusMiddleware,
     },
-    repositories::grades::ShallowGrades,
+    repositories::{
+        categories::Categories, grades::ShallowGrades, subjects::Subjects, users::Users,
+    },
     stateful_result,
 };
 
@@ -261,6 +264,25 @@ impl SynergiaApi<UnauthenticatedState> {
     }
 }
 
+#[derive(Debug)]
+pub enum AuthenticatedSynergiaEndpoints {
+    Users,
+    Grades,
+    Subjects,
+    Categories,
+}
+
+impl AuthenticatedSynergiaEndpoints {
+    const fn path(&self) -> &'static str {
+        match self {
+            AuthenticatedSynergiaEndpoints::Users => "/gateway/api/2.0/Auth/Users",
+            AuthenticatedSynergiaEndpoints::Grades => "/gateway/api/2.0/Auth/Grades",
+            AuthenticatedSynergiaEndpoints::Subjects => "/gateway/api/2.0/Auth/Subjects",
+            AuthenticatedSynergiaEndpoints::Categories => "/gateway/api/2.0/Auth/Categories",
+        }
+    }
+}
+
 // We're using the api of the new ui
 impl SynergiaApi<AuthenticatedState> {
     fn try_from_auth_manager(
@@ -269,6 +291,23 @@ impl SynergiaApi<AuthenticatedState> {
         Ok(Self {
             state: AuthenticatedState::try_from_auth_manager(authorization_manager)?,
         })
+    }
+
+    async fn fetch_synergia_endpoint<T: DeserializeOwned>(
+        &self,
+        endpoint: AuthenticatedSynergiaEndpoints,
+    ) -> Result<T> {
+        debug!("fetching {endpoint:?}");
+        let resource = self
+            .state
+            .client
+            .get(SYNERGIA_URL.join(endpoint.path()).unwrap())
+            .send()
+            .await?
+            .json::<T>()
+            .await?;
+        debug!("fetched {endpoint:?} succesfully");
+        Ok(resource)
     }
 
     // TODO: actually properly parse the data or something
@@ -288,20 +327,27 @@ impl SynergiaApi<AuthenticatedState> {
         Ok(text)
     }
 
+    pub async fn users(&self) -> Result<Users> {
+        Ok(self
+            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Users)
+            .await?)
+    }
+
     pub async fn grades(&self) -> Result<ShallowGrades> {
-        const GRADES_ENDPOINT: &str = "/gateway/api/2.0/Grades";
-        debug!("fetching grades");
+        Ok(self
+            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Grades)
+            .await?)
+    }
 
-        let grades = self
-            .state
-            .client
-            .get(SYNERGIA_URL.join(GRADES_ENDPOINT)?)
-            .send()
-            .await?
-            .json::<ShallowGrades>()
-            .await?;
+    pub async fn subjects(&self) -> Result<Subjects> {
+        Ok(self
+            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Subjects)
+            .await?)
+    }
 
-        debug!("successfully fetched grades");
-        Ok(grades)
+    pub async fn categories(&self) -> Result<Categories> {
+        Ok(self
+            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Categories)
+            .await?)
     }
 }

@@ -80,6 +80,7 @@ impl TokenManager {
     }
 
     // this function ensures that token refreshes happen atomically
+    // TODO: fix this garbage, the lock is held during a network request for no reason
     pub async fn refresh(&self) -> Result<(), TokenManagerError> {
         let mut tokens = self.tokens.write().await;
 
