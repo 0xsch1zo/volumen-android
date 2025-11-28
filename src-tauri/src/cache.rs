@@ -4,8 +4,9 @@ use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 
 use crate::repositories::{
-    grades::{Category, CategoryId, Subject, SubjectId},
-    users::{User, UserId, Users},
+    categories::{Category, CategoryId},
+    subjects::{Subject, SubjectId},
+    users::{User, UserId},
 };
 
 #[derive(Error, Debug)]
@@ -16,7 +17,7 @@ struct CacheEntryNotFoudError;
 pub struct Cache {
     pub users: KeyedCacheResource<UserId, User>,
     pub subjects: KeyedCacheResource<SubjectId, Subject>,
-    pub category: KeyedCacheResource<CategoryId, Category>,
+    pub categories: KeyedCacheResource<CategoryId, Category>,
 }
 
 impl Cache {
@@ -24,7 +25,7 @@ impl Cache {
         Self {
             users: KeyedCacheResource::new(),
             subjects: KeyedCacheResource::new(),
-            category: KeyedCacheResource::new(),
+            categories: KeyedCacheResource::new(),
         }
     }
 }
@@ -34,11 +35,11 @@ pub trait Keyable<K: Copy + Hash + Eq> {
 }
 
 #[derive(Debug)]
-struct KeyedCacheResource<K: Copy + Hash + Eq, V: Keyable<K> + Debug> {
+struct KeyedCacheResource<K: Copy + Hash + Eq, V: Keyable<K>> {
     resource: RwLock<HashMap<K, V>>,
 }
 
-impl<K: Copy + Hash + Eq, V: Keyable<K> + Debug> KeyedCacheResource<K, V> {
+impl<K: Copy + Hash + Eq, V: Keyable<K>> KeyedCacheResource<K, V> {
     fn new() -> Self {
         Self {
             resource: RwLock::new(HashMap::new()),
