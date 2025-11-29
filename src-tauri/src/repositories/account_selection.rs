@@ -3,7 +3,7 @@ use crate::{
     net::synergia_api::account_selector::AccountSelector,
     repositories::{
         entities::{SynergiaAccounts, SynergiaUserId},
-        main::MainRepo,
+        main::MainRepository,
         Result, StatefulError,
     },
 };
@@ -22,10 +22,10 @@ impl AccountSelectionRepository {
         Ok(self.account_selector.accounts().await?)
     }
 
-    pub fn select(self, user_id: SynergiaUserId) -> Result<MainRepo, StatefulError<Self>> {
+    pub fn select(self, user_id: SynergiaUserId) -> Result<MainRepository, StatefulError<Self>> {
         self.account_selector
             .select(user_id)
-            .map(MainRepo::new)
+            .map(MainRepository::new)
             .map_err_state(AccountSelectionRepository::new)
             .map_stateful_err(Into::into)
     }

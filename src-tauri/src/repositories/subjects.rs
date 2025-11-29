@@ -34,8 +34,8 @@ impl From<Reference> for SubjectId {
                                    // is in pascal?
 pub struct Subject {
     #[serde(rename = "numericIdentifier")]
-    id: SubjectId,
-    name: String,
+    pub id: SubjectId,
+    pub name: String,
 }
 
 impl Keyable<SubjectId> for Subject {
@@ -50,21 +50,22 @@ pub struct Subjects {
     pub inner: Vec<Subject>,
 }
 
+#[derive(Debug, Clone)]
 pub struct SubjectsRepository {
-    cache: Arc<Cache>,
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
+    cache: Arc<Cache>,
 }
 
 impl SubjectsRepository {
-    pub fn new(cache: Arc<Cache>, synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
+    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>, cache: Arc<Cache>) -> Self {
         Self {
-            cache,
             synergia_api,
+            cache,
         }
     }
 
-    pub async fn subject(&self, id: &SubjectId) -> Result<Subject, Error> {
-        if let Some(subject) = self.cache.subjects.read().await.get(id) {
+    pub async fn subject(&self, id: SubjectId) -> Result<Subject, Error> {
+        if let Some(subject) = self.cache.subjects.read().await.get(&id) {
             return Ok(subject.clone());
         }
 
@@ -80,8 +81,8 @@ impl SubjectsRepository {
             .subjects
             .read()
             .await
-            .get(id)
-            .ok_or(Error::SubjectNotFound(*id))?
+            .get(&id)
+            .ok_or(Error::SubjectNotFound(id))?
             .clone())
     }
 }

@@ -27,10 +27,10 @@ pub struct CategoryId(usize);
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Category {
-    id: CategoryId,
-    name: String,
-    count_to_the_average: bool,
-    weight: bool,
+    pub id: CategoryId,
+    pub name: String,
+    pub count_to_the_average: bool,
+    pub weight: bool,
 }
 
 impl From<Reference> for CategoryId {
@@ -52,21 +52,22 @@ pub struct Categories {
     pub inner: Vec<Category>,
 }
 
+#[derive(Debug, Clone)]
 pub struct CategoriesRepository {
-    cache: Arc<Cache>,
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
+    cache: Arc<Cache>,
 }
 
 impl CategoriesRepository {
-    pub fn new(cache: Arc<Cache>, synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
+    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>, cache: Arc<Cache>) -> Self {
         Self {
-            cache,
             synergia_api,
+            cache,
         }
     }
 
-    pub async fn category(&self, id: &CategoryId) -> Result<Category, Error> {
-        if let Some(category) = self.cache.categories.read().await.get(id) {
+    pub async fn category(&self, id: CategoryId) -> Result<Category, Error> {
+        if let Some(category) = self.cache.categories.read().await.get(&id) {
             return Ok(category.clone());
         }
 
@@ -83,7 +84,7 @@ impl CategoriesRepository {
             .read()
             .await
             .get(&id)
-            .ok_or(Error::CategoryNotFound(*id))?
+            .ok_or(Error::CategoryNotFound(id))?
             .clone())
     }
 }

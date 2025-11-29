@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -49,21 +51,22 @@ pub struct Users {
     pub inner: Vec<User>,
 }
 
+#[derive(Debug, Clone)]
 pub struct UsersRepository {
-    synergia_api: SynergiaApi<AuthenticatedState>,
-    cache: Cache,
+    synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
+    cache: Arc<Cache>,
 }
 
 impl UsersRepository {
-    pub fn new(synergia_api: SynergiaApi<AuthenticatedState>, cache: Cache) -> Self {
+    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>, cache: Arc<Cache>) -> Self {
         Self {
             synergia_api,
             cache,
         }
     }
 
-    pub async fn user(&self, user_id: &UserId) -> Result<User, Error> {
-        if let Some(user) = self.cache.users.read().await.get(user_id) {
+    pub async fn user(&self, id: UserId) -> Result<User, Error> {
+        if let Some(user) = self.cache.users.read().await.get(&id) {
             return Ok(user.clone());
         }
 
@@ -79,8 +82,8 @@ impl UsersRepository {
             .users
             .read()
             .await
-            .get(&user_id)
-            .ok_or(Error::UserNotFound(*user_id))?
+            .get(&id)
+            .ok_or(Error::UserNotFound(id))?
             .clone())
     }
 }
