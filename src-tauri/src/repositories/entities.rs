@@ -25,7 +25,12 @@ pub struct SynergiaAccounts {
 // Generic reference used for internal purposes
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
-pub struct Reference {
-    pub id: usize,
-    pub url: String,
+#[serde(untagged)]
+pub enum Reference {
+    #[serde(rename_all = "PascalCase")]
+    Linked {
+        id: usize,
+        url: String,
+    },
+    Standalone(usize),
 }

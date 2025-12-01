@@ -24,6 +24,15 @@ pub enum Error {
 #[serde(from = "Reference")]
 pub struct CategoryId(usize);
 
+impl From<Reference> for CategoryId {
+    fn from(value: Reference) -> Self {
+        Self(match value {
+            Reference::Linked { id, .. } => id,
+            Reference::Standalone(id) => id,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Category {
@@ -31,12 +40,6 @@ pub struct Category {
     pub name: String,
     pub count_to_the_average: bool,
     pub weight: bool,
-}
-
-impl From<Reference> for CategoryId {
-    fn from(value: Reference) -> Self {
-        Self(value.id)
-    }
 }
 
 impl Keyable<CategoryId> for Category {

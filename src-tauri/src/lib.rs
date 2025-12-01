@@ -76,8 +76,13 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .as_state::<AuthenticatedState>()
         .into_app_result()
         .log_on_err()?;
-    let me = state.main_repo.me().await.into_app_result().log_on_err()?;
-    Ok(format!("{:?}", me))
+    let grades = state
+        .main_repository
+        .grades()
+        .await
+        .into_app_result()
+        .log_on_err()?;
+    Ok(format!("{:?}", grades))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

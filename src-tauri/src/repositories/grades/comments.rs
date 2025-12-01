@@ -32,7 +32,10 @@ impl CommentId {
 
 impl From<Reference> for CommentId {
     fn from(value: Reference) -> Self {
-        Self(value.id)
+        Self(match value {
+            Reference::Linked { id, .. } => id,
+            Reference::Standalone(id) => id,
+        })
     }
 }
 

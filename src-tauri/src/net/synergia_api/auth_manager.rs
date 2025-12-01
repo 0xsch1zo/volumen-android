@@ -2,7 +2,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::net::synergia_api::token_management::{
-    TokenManager, TokenManagerError, TokenPicker, TokenPickerError,
+    PickedToken, TokenManager, TokenManagerError, TokenPicker, TokenPickerError,
 };
 
 #[derive(Error, Debug)]
@@ -28,7 +28,7 @@ impl AuthorizationManager {
         }
     }
 
-    pub async fn managed_token(&self, url: &Url) -> Result<Option<String>> {
+    pub async fn managed_token(&self, url: &Url) -> Result<Option<PickedToken>> {
         let tokens = self.token_manager.get().await;
         Ok(self.token_picker.pick(url, &tokens)?)
     }

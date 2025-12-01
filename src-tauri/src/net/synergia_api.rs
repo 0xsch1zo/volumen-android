@@ -3,6 +3,7 @@ use std::{borrow::Cow, cell::LazyCell, sync::Arc};
 use itertools::Itertools;
 use log::{debug, warn};
 use reqwest::{
+    cookie::Jar,
     header::{InvalidHeaderValue, ToStrError},
     redirect::{Action, Attempt, Policy},
     Url,
@@ -27,7 +28,11 @@ use crate::{
         ErrorStatusMiddleware,
     },
     repositories::{
-        categories::Categories, grades::ShallowGrades, subjects::Subjects, users::Users,
+        categories::Categories,
+        grades::ShallowGrades,
+        grades::{Comment, CommentId},
+        subjects::Subjects,
+        users::Users,
     },
     stateful_result,
 };
@@ -265,20 +270,24 @@ impl SynergiaApi<UnauthenticatedState> {
 }
 
 #[derive(Debug)]
-pub enum AuthenticatedSynergiaEndpoints {
+enum AuthenticatedSynergiaEndpoints {
     Users,
     Grades,
     Subjects,
     Categories,
+    Comments(CommentId),
 }
 
 impl AuthenticatedSynergiaEndpoints {
-    const fn path(&self) -> &'static str {
+    fn path(&self) -> String {
         match self {
-            AuthenticatedSynergiaEndpoints::Users => "/gateway/api/2.0/Auth/Users",
-            AuthenticatedSynergiaEndpoints::Grades => "/gateway/api/2.0/Auth/Grades",
-            AuthenticatedSynergiaEndpoints::Subjects => "/gateway/api/2.0/Auth/Subjects",
-            AuthenticatedSynergiaEndpoints::Categories => "/gateway/api/2.0/Auth/Categories",
+            AuthenticatedSynergiaEndpoints::Users => "/gateway/api/2.0/Users".to_owned(),
+            AuthenticatedSynergiaEndpoints::Grades => "/gateway/api/2.0/Grades".to_owned(),
+            AuthenticatedSynergiaEndpoints::Subjects => "/gateway/api/2.0/Subjects".to_owned(),
+            AuthenticatedSynergiaEndpoints::Categories => "/gateway/api/2.0/Categories".to_owned(),
+            AuthenticatedSynergiaEndpoints::Comments(id) => {
+                format!("/gateway/api/2.0/Grades/Comments/{}", id.inner())
+            }
         }
     }
 }
@@ -301,7 +310,7 @@ impl SynergiaApi<AuthenticatedState> {
         let resource = self
             .state
             .client
-            .get(SYNERGIA_URL.join(endpoint.path()).unwrap())
+            .get(SYNERGIA_URL.join(&endpoint.path()).unwrap())
             .send()
             .await?
             .json::<T>()
@@ -327,6 +336,8 @@ impl SynergiaApi<AuthenticatedState> {
         Ok(text)
     }
 
+    // fetch_synergia_endpoint isn't exposed because we don't want to let the user be able to
+    // choose a wrong type for the output on accident
     pub async fn users(&self) -> Result<Users> {
         Ok(self
             .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Users)
@@ -348,6 +359,12 @@ impl SynergiaApi<AuthenticatedState> {
     pub async fn categories(&self) -> Result<Categories> {
         Ok(self
             .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Categories)
+            .await?)
+    }
+
+    pub async fn comment(&self, id: CommentId) -> Result<Comment> {
+        Ok(self
+            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Comments(id))
             .await?)
     }
 }

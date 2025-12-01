@@ -8,7 +8,8 @@ use crate::{
     net::{
         synergia_api::{
             internal_types::{
-                PortalAccessToken, PortalRefreshToken, PortalTokenPair, SynergiaTokens,
+                PortalAccessToken, PortalRefreshToken, PortalTokenPair, SynergiaToken,
+                SynergiaTokens,
             },
             LIBRUS_API_URL, PORTAL_URL, SYNERGIA_URL,
         },
@@ -42,6 +43,20 @@ enum PortalGrant<'a> {
 impl<'a> From<AuthCode<'a>> for PortalGrant<'a> {
     fn from(value: AuthCode<'a>) -> Self {
         PortalGrant::AuthCode(value.0)
+    }
+}
+
+pub enum PickedToken {
+    PortalAccessToken(PortalAccessToken),
+    SynergiaToken(SynergiaToken),
+}
+
+impl PickedToken {
+    fn to_inner(self) -> String {
+        match self {
+            Self::PortalAccessToken(t) => t.as_inner().to_owned(),
+            Self::SynergiaToken(t) => t.as_inner().to_owned(),
+        }
     }
 }
 
@@ -170,18 +185,28 @@ impl TokenPicker {
         Self { synergia_id }
     }
 
-    pub fn pick(&self, url: &Url, tokens: &Tokens) -> Result<Option<String>, TokenPickerError> {
+    pub fn pick(
+        &self,
+        url: &Url,
+        tokens: &Tokens,
+    ) -> Result<Option<PickedToken>, TokenPickerError> {
         let synergia_token = tokens
             .synergia_tokens
             .inner()
             .get(&self.synergia_id)
-            .ok_or(TokenPickerError::SynergiaAccessTokenNotFound)?
-            .as_inner();
+            .ok_or(TokenPickerError::SynergiaAccessTokenNotFound)?;
+        let portal_token = tokens.portal_token_pair.access_token.clone();
 
         let managed_hosts = [
-            (PORTAL_URL, tokens.portal_token_pair.access_token.as_inner()),
-            (SYNERGIA_URL, synergia_token),
-            (LIBRUS_API_URL, synergia_token),
+            (PORTAL_URL, PickedToken::PortalAccessToken(portal_token)),
+            (
+                SYNERGIA_URL,
+                PickedToken::SynergiaToken(synergia_token.clone()),
+            ),
+            (
+                LIBRUS_API_URL,
+                PickedToken::SynergiaToken(synergia_token.to_owned()),
+            ),
         ];
 
         let Some(token) = managed_hosts
@@ -190,6 +215,6 @@ impl TokenPicker {
         else {
             return Ok(None);
         };
-        Ok(Some(token.1.to_owned()))
+        Ok(Some(token.1))
     }
 }

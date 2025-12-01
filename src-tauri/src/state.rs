@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     error::{ApplicationError, StatefulError},
-    repositories::{AccountSelectionRepository, LoginRepository, MainRepo},
+    repositories::{AccountSelectionRepository, LoginRepository, MainRepository},
 };
 
 pub trait AppState: Debug + Any + Send + Sync + 'static {
@@ -39,12 +39,12 @@ impl AccountSelectionState {
 
 #[derive(Debug)]
 pub struct AuthenticatedState {
-    pub main_repo: MainRepo,
+    pub main_repository: MainRepository,
 }
 
 impl AuthenticatedState {
-    pub fn new(main_repo: MainRepo) -> Self {
-        Self { main_repo }
+    pub fn new(main_repository: MainRepository) -> Self {
+        Self { main_repository }
     }
 }
 

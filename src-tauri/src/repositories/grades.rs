@@ -34,14 +34,8 @@ pub enum Error {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(from = "Reference")]
+#[serde(transparent)]
 pub struct GradeId(usize);
-
-impl From<Reference> for GradeId {
-    fn from(value: Reference) -> Self {
-        Self(value.id)
-    }
-}
 
 // TODO: move this doghit into synergia_api
 #[derive(Serialize, Deserialize)]
@@ -57,6 +51,7 @@ pub struct ShallowGrade {
     subject: SubjectId,
     category: CategoryId,
     added_by: UserId,
+    #[serde(default)]
     comments: Vec<CommentId>,
     grade: String,
     date: String,

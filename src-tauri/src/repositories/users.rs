@@ -26,7 +26,10 @@ pub struct UserId(usize);
 
 impl From<Reference> for UserId {
     fn from(value: Reference) -> Self {
-        Self(value.id)
+        Self(match value {
+            Reference::Linked { id, .. } => id,
+            Reference::Standalone(id) => id,
+        })
     }
 }
 

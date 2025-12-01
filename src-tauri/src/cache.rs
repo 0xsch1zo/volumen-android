@@ -5,19 +5,21 @@ use tokio::sync::{RwLock, RwLockReadGuard};
 
 use crate::repositories::{
     categories::{Category, CategoryId},
+    grades::{Comment, CommentId},
     subjects::{Subject, SubjectId},
     users::{User, UserId},
 };
 
 #[derive(Error, Debug)]
 #[error("cache entry not found")]
-struct CacheEntryNotFoudError;
+pub struct CacheEntryNotFoudError;
 
 #[derive(Debug)]
 pub struct Cache {
     pub users: KeyedCacheResource<UserId, User>,
     pub subjects: KeyedCacheResource<SubjectId, Subject>,
     pub categories: KeyedCacheResource<CategoryId, Category>,
+    pub comments: KeyedCacheResource<CommentId, Comment>,
 }
 
 impl Cache {
@@ -26,6 +28,7 @@ impl Cache {
             users: KeyedCacheResource::new(),
             subjects: KeyedCacheResource::new(),
             categories: KeyedCacheResource::new(),
+            comments: KeyedCacheResource::new(),
         }
     }
 }
@@ -35,7 +38,7 @@ pub trait Keyable<K: Copy + Hash + Eq> {
 }
 
 #[derive(Debug)]
-struct KeyedCacheResource<K: Copy + Hash + Eq, V: Keyable<K>> {
+pub struct KeyedCacheResource<K: Copy + Hash + Eq, V: Keyable<K>> {
     resource: RwLock<HashMap<K, V>>,
 }
 
