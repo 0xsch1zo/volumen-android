@@ -3,7 +3,6 @@ use std::{borrow::Cow, cell::LazyCell, sync::Arc};
 use itertools::Itertools;
 use log::{debug, warn};
 use reqwest::{
-    cookie::Jar,
     header::{InvalidHeaderValue, ToStrError},
     redirect::{Action, Attempt, Policy},
     Url,
@@ -284,7 +283,9 @@ impl AuthenticatedSynergiaEndpoints {
             AuthenticatedSynergiaEndpoints::Users => "/gateway/api/2.0/Users".to_owned(),
             AuthenticatedSynergiaEndpoints::Grades => "/gateway/api/2.0/Grades".to_owned(),
             AuthenticatedSynergiaEndpoints::Subjects => "/gateway/api/2.0/Subjects".to_owned(),
-            AuthenticatedSynergiaEndpoints::Categories => "/gateway/api/2.0/Categories".to_owned(),
+            AuthenticatedSynergiaEndpoints::Categories => {
+                "/gateway/api/2.0/Grades/Categories".to_owned()
+            }
             AuthenticatedSynergiaEndpoints::Comments(id) => {
                 format!("/gateway/api/2.0/Grades/Comments/{}", id.inner())
             }

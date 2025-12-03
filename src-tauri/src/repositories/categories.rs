@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::sync::RwLock;
 
 use crate::{
     cache::{Cache, Keyable},
@@ -39,7 +40,7 @@ pub struct Category {
     pub id: CategoryId,
     pub name: String,
     pub count_to_the_average: bool,
-    pub weight: bool,
+    pub weight: Option<usize>,
 }
 
 impl Keyable<CategoryId> for Category {
@@ -59,6 +60,7 @@ pub struct Categories {
 pub struct CategoriesRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
     cache: Arc<Cache>,
+    sync: Arc<RwLock<()>>,
 }
 
 impl CategoriesRepository {
@@ -66,14 +68,19 @@ impl CategoriesRepository {
         Self {
             synergia_api,
             cache,
+            sync: Arc::new(RwLock::new(())),
         }
     }
 
     pub async fn category(&self, id: CategoryId) -> Result<Category, Error> {
-        if let Some(category) = self.cache.categories.read().await.get(&id) {
-            return Ok(category.clone());
+        {
+            let _guard = self.sync.read().await;
+            if let Some(category) = self.cache.categories.read().await.get(&id) {
+                return Ok(category.clone());
+            }
         }
 
+        let _guard = self.sync.write().await;
         let categories = self
             .synergia_api
             .categories()

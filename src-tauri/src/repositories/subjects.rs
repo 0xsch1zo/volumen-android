@@ -10,6 +10,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::sync::RwLock;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -33,12 +34,12 @@ impl From<Reference> for SubjectId {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")] // what the fuck is this? Why is this in camel and the rest
-                                   // is in pascal?
+#[serde(rename_all = "PascalCase")]
 pub struct Subject {
-    #[serde(rename = "numericIdentifier")]
     pub id: SubjectId,
     pub name: String,
+    pub short: String,
+    pub is_extracurricular: bool,
 }
 
 impl Keyable<SubjectId> for Subject {
@@ -49,7 +50,7 @@ impl Keyable<SubjectId> for Subject {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Subjects {
-    #[serde(rename = "data")]
+    #[serde(rename = "Subjects")]
     pub inner: Vec<Subject>,
 }
 
@@ -57,6 +58,7 @@ pub struct Subjects {
 pub struct SubjectsRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
     cache: Arc<Cache>,
+    sync: Arc<RwLock<()>>,
 }
 
 impl SubjectsRepository {
@@ -64,14 +66,19 @@ impl SubjectsRepository {
         Self {
             synergia_api,
             cache,
+            sync: Arc::new(RwLock::new(())),
         }
     }
 
     pub async fn subject(&self, id: SubjectId) -> Result<Subject, Error> {
-        if let Some(subject) = self.cache.subjects.read().await.get(&id) {
-            return Ok(subject.clone());
+        {
+            let _guard = self.sync.read().await;
+            if let Some(subject) = self.cache.subjects.read().await.get(&id) {
+                return Ok(subject.clone());
+            }
         }
 
+        let _guard = self.sync.write().await;
         let subjects = self
             .synergia_api
             .subjects()
