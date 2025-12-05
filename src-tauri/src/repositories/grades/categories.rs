@@ -74,7 +74,8 @@ impl CategoriesRepository {
 
     pub async fn category(&self, id: CategoryId) -> Result<Category, Error> {
         {
-            let _guard = self.sync.read().await;
+            let _guard = self.sync.read().await; // because the cache will have the data when we
+                                                 // get the read handle if it didn't previously
             if let Some(category) = self.cache.categories.read().await.get(&id) {
                 return Ok(category.clone());
             }

@@ -1,27 +1,26 @@
 use std::sync::Arc;
 
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    cache::{Cache, Keyable},
+    cache::Cache,
     net::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
     },
     repositories::{
-        categories::{self, CategoriesRepository, Category, CategoryId},
-        entities::Reference,
+        grades::categories::CategoriesRepository,
         subjects::{self, Subject, SubjectId, SubjectsRepository},
-        users::{User, UserId, Users, UsersRepository},
+        users::{User, UserId, UsersRepository},
     },
 };
 
+pub use categories::{Categories, Category, CategoryId};
 pub use comments::{Comment, CommentId};
-
-mod comments;
+pub mod categories;
+pub mod comments;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -37,7 +36,7 @@ pub enum Error {
 #[serde(transparent)]
 pub struct GradeId(usize);
 
-// TODO: move this doghit into synergia_api
+// TODO: move this dogshit into synergia_api
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct ShallowGrades {

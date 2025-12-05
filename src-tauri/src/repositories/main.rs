@@ -4,7 +4,6 @@ use crate::{
     cache::Cache,
     net::{synergia_api::AuthenticatedState, SynergiaApi},
     repositories::{
-        categories::CategoriesRepository,
         grades::{Grade, GradesRepository},
         subjects::SubjectsRepository,
         users::UsersRepository,
@@ -17,7 +16,6 @@ pub struct MainRepository {
     grades: GradesRepository,
     subjects: SubjectsRepository,
     users: UsersRepository,
-    categories: CategoriesRepository,
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
     cache: Arc<Cache>,
 }
@@ -30,13 +28,11 @@ impl MainRepository {
         let grades = GradesRepository::new(Arc::clone(&synergia_api), Arc::clone(&cache));
         let subjects = SubjectsRepository::new(Arc::clone(&synergia_api), Arc::clone(&cache));
         let users = UsersRepository::new(Arc::clone(&synergia_api), Arc::clone(&cache));
-        let categories = CategoriesRepository::new(Arc::clone(&synergia_api), Arc::clone(&cache));
 
         Self {
             grades,
             subjects,
             users,
-            categories,
             synergia_api,
             cache,
         }

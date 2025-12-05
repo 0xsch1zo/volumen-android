@@ -59,6 +59,9 @@ pub struct CommentsRepository {
 
 impl CommentsRepository {
     pub async fn comment(&self, id: CommentId) -> Result<Comment, Error> {
+        // we shouldn't need to ensure that one request goes out at a time since there the comments
+        // will not be fetched in a multithreaded scenario and even if they were they're still
+        // getting fetched by id, so they requests will probably be unique anyway
         if let Some(comment) = self.cache.comments.read().await.get(&id) {
             return Ok(comment.clone());
         }
