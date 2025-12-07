@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use futures::TryFutureExt;
+use log::debug;
 use reqwest::{multipart, Client};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use thiserror::Error;
@@ -16,14 +20,32 @@ use crate::{
         ErrorStatusMiddleware, IsSameBaseExt,
     },
     repositories::entities::SynergiaUserId,
+    sync::SingleParallelFlight,
 };
 
-#[derive(Error, Debug)]
-pub enum TokenManagerError {
+#[derive(Error, Debug, Clone)]
+pub enum TokenFetchError {
     #[error("reqwest error")]
-    ReqwestError(#[from] reqwest::Error),
+    ReqwestError(#[from] Arc<reqwest::Error>),
     #[error("reqwest middleware error")]
-    ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
+    ReqwestMiddlewareError(#[from] Arc<reqwest_middleware::Error>),
+}
+
+// experimental error handling solution
+#[derive(Error, Debug, Clone)]
+#[error(transparent)]
+pub struct PortalTokenFetchError(#[from] TokenFetchError);
+
+#[derive(Error, Debug, Clone)]
+#[error(transparent)]
+pub struct SynergiaTokenFetchError(#[from] TokenFetchError);
+
+#[derive(Error, Debug, Clone)]
+pub enum TokenManagerError {
+    #[error("falied to fetch portal tokesn")]
+    PortalTokenError(#[from] PortalTokenFetchError),
+    #[error("falied to fetch synergia tokens")]
+    SynergiaTokenError(#[from] SynergiaTokenFetchError),
 }
 
 #[repr(transparent)]
@@ -51,15 +73,6 @@ pub enum PickedToken {
     SynergiaToken(SynergiaToken),
 }
 
-impl PickedToken {
-    fn to_inner(self) -> String {
-        match self {
-            Self::PortalAccessToken(t) => t.as_inner().to_owned(),
-            Self::SynergiaToken(t) => t.as_inner().to_owned(),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Tokens {
     pub portal_token_pair: PortalTokenPair,
@@ -70,6 +83,7 @@ pub struct Tokens {
 pub struct TokenManager {
     tokens: RwLock<Tokens>,
     client: ClientWithMiddleware,
+    refresh_worker: SingleParallelFlight<Result<(), TokenManagerError>>,
 }
 
 impl TokenManager {
@@ -87,6 +101,7 @@ impl TokenManager {
                 portal_token_pair,
             }),
             client,
+            refresh_worker: SingleParallelFlight::new(),
         })
     }
 
@@ -95,28 +110,37 @@ impl TokenManager {
     }
 
     // this function ensures that token refreshes happen atomically
-    // TODO: fix this garbage, the lock is held during a network request for no reason
     pub async fn refresh(&self) -> Result<(), TokenManagerError> {
-        let mut tokens = self.tokens.write().await;
+        self.refresh_worker
+            .work(async || {
+                let portal_token_pair = {
+                    let tokens = self.tokens.read().await;
 
-        tokens.portal_token_pair = Self::fetch_portal_token(
-            &self.client,
-            PortalGrant::RefreshToken(&tokens.portal_token_pair.refresh_token),
-        )
-        .await?;
+                    Self::fetch_portal_token(
+                        &self.client,
+                        PortalGrant::RefreshToken(&tokens.portal_token_pair.refresh_token),
+                    )
+                    .await?
+                };
 
-        tokens.synergia_tokens =
-            Self::fetch_synergia_tokens(&self.client, &tokens.portal_token_pair.access_token)
-                .await?;
+                let synergia_token =
+                    Self::fetch_synergia_tokens(&self.client, &portal_token_pair.access_token)
+                        .await?;
 
-        drop(tokens);
+                let mut tokens = self.tokens.write().await;
+                tokens.portal_token_pair = portal_token_pair;
+                tokens.synergia_tokens = synergia_token;
+                Ok(())
+            })
+            .await?;
+
         Ok(())
     }
 
     async fn fetch_portal_token(
         client: &ClientWithMiddleware,
         grant: PortalGrant<'_>,
-    ) -> Result<PortalTokenPair, TokenManagerError> {
+    ) -> Result<PortalTokenPair, PortalTokenFetchError> {
         const ACCESS_TOKEN_ENDPOINT: &str = "/oauth2/access_token";
         const CLIENT_ID: &str = "VaItV6oRutdo8fnjJwysnTjVlvaswf52ZqmXsJGP";
 
@@ -146,8 +170,10 @@ impl TokenManager {
             .post(PORTAL_URL.join(ACCESS_TOKEN_ENDPOINT).unwrap())
             .multipart(form)
             .send()
+            .map_err(|e| TokenFetchError::from(Arc::new(e)))
             .await?
             .json::<PortalTokenPair>()
+            .map_err(|e| TokenFetchError::from(Arc::new(e)))
             .await?;
         Ok(tokens)
     }
@@ -155,15 +181,17 @@ impl TokenManager {
     async fn fetch_synergia_tokens(
         client: &ClientWithMiddleware,
         portal_access_token: &PortalAccessToken,
-    ) -> Result<SynergiaTokens, TokenManagerError> {
+    ) -> Result<SynergiaTokens, PortalTokenFetchError> {
         const SYNERGIA_ACCOUNT_ENDPOINT: &str = "/api/v3/SynergiaAccounts";
 
         let synergia_tokens = client
             .get(PORTAL_URL.join(SYNERGIA_ACCOUNT_ENDPOINT).unwrap())
             .bearer_auth(portal_access_token.as_inner())
             .send()
+            .map_err(|e| TokenFetchError::from(Arc::new(e)))
             .await?
             .json::<SynergiaTokens>()
+            .map_err(|e| TokenFetchError::from(Arc::new(e)))
             .await?;
         Ok(synergia_tokens)
     }

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use log::debug;
 use reqwest::{
-    cookie::Jar,
     header::{self, InvalidHeaderValue, ToStrError},
     Request, Response, StatusCode,
 };

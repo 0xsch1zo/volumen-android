@@ -27,9 +27,7 @@ use crate::{
         ErrorStatusMiddleware,
     },
     repositories::{
-        categories::Categories,
-        grades::ShallowGrades,
-        grades::{Comment, CommentId},
+        grades::{Categories, Comment, CommentId, ShallowGrades},
         subjects::Subjects,
         users::Users,
     },
