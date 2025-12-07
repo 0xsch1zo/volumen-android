@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    cache::Cache,
     net::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
@@ -163,21 +162,19 @@ pub struct GradeDetails {
 #[derive(Debug, Clone)]
 pub struct GradesRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
-    cache: Arc<Cache>,
     users: UsersRepository,
     subjects: SubjectsRepository,
     categories: CategoriesRepository,
 }
 
 impl GradesRepository {
-    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>, cache: Arc<Cache>) -> Self {
-        let users = UsersRepository::new(Arc::clone(&synergia_api), Arc::clone(&cache));
-        let subjects = SubjectsRepository::new(Arc::clone(&synergia_api), Arc::clone(&cache));
-        let categories = CategoriesRepository::new(Arc::clone(&synergia_api), Arc::clone(&cache));
+    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
+        let users = UsersRepository::new(Arc::clone(&synergia_api));
+        let subjects = SubjectsRepository::new(Arc::clone(&synergia_api));
+        let categories = CategoriesRepository::new(Arc::clone(&synergia_api));
 
         Self {
             synergia_api,
-            cache,
             users,
             subjects,
             categories,

@@ -3,19 +3,20 @@ use tokio::sync::{
     RwLock,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum FlightState {
     Ground,
     Flying,
 }
 
-struct SingleParallelFlight<T: Send + Sync + Clone> {
+#[derive(Debug)]
+pub struct SingleParallelFlight<T: Send + Sync + Clone> {
     tx: Sender<T>,
     state: RwLock<FlightState>,
 }
 
 impl<T: Send + Sync + Clone> SingleParallelFlight<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let (tx, _) = broadcast::channel::<T>(1);
         Self {
             tx,
@@ -23,12 +24,16 @@ impl<T: Send + Sync + Clone> SingleParallelFlight<T> {
         }
     }
 
-    async fn work(&self, work: impl AsyncFnOnce() -> T) -> T {
-        match *self.state.read().await {
+    pub async fn work(&self, work: impl AsyncFnOnce() -> T) -> T {
+        let state = *self.state.read().await;
+        match state {
             FlightState::Ground => {
                 *self.state.write().await = FlightState::Flying;
                 let t = work().await;
-                self.tx.send(t.clone());
+                // IMPORATNT: this fails only if there are no listeners, in that case we don't
+                // really care anyway, because it just means that there weren't any concurrent
+                // calls so we can just function normally
+                let _ = self.tx.send(t.clone());
                 *self.state.write().await = FlightState::Ground;
                 t
             }

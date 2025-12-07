@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    cache::{Cache, Keyable},
+    cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
@@ -10,14 +10,13 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::sync::RwLock;
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("subject with id: {0:?}, not found")]
     SubjectNotFound(SubjectId),
     #[error("subject fetch failed")]
-    SubjectFetchFailed(#[source] synergia_api::Error),
+    SubjectFetchFailed(#[source] CacheComputeError),
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -57,41 +56,34 @@ pub struct Subjects {
 #[derive(Debug, Clone)]
 pub struct SubjectsRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
-    cache: Arc<Cache>,
-    sync: Arc<RwLock<()>>,
+    cache: AutoKeyedCache<SubjectId, Subject>,
 }
 
 impl SubjectsRepository {
-    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>, cache: Arc<Cache>) -> Self {
+    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
         Self {
             synergia_api,
-            cache,
-            sync: Arc::new(RwLock::new(())),
+            cache: AutoKeyedCache::new(),
         }
     }
 
     pub async fn subject(&self, id: SubjectId) -> Result<Subject, Error> {
-        {
-            let _guard = self.sync.read().await;
-            if let Some(subject) = self.cache.subjects.read().await.get(&id) {
-                return Ok(subject.clone());
-            }
+        if let Some(subject) = self.cache.get(&id).await {
+            return Ok(subject);
         }
 
-        let _guard = self.sync.write().await;
-        let subjects = self
-            .synergia_api
-            .subjects()
+        self.cache
+            .try_bulk_insert_with(async {
+                let subjects = self.synergia_api.subjects().await?;
+                Ok::<_, synergia_api::Error>(subjects.inner)
+            })
             .await
             .map_err(|e| Error::SubjectFetchFailed(e))?;
-        self.cache.subjects.write_values(subjects.inner).await;
 
         Ok(self
             .cache
-            .subjects
-            .read()
-            .await
             .get(&id)
+            .await
             .ok_or(Error::SubjectNotFound(id))?
             .clone())
     }

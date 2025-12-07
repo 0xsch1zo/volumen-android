@@ -2,10 +2,9 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::sync::RwLock;
 
 use crate::{
-    cache::{Cache, Keyable},
+    cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
@@ -18,7 +17,7 @@ pub enum Error {
     #[error("category with id: {0:?}, not found")]
     CategoryNotFound(CategoryId),
     #[error("failed to fetch categories")]
-    CategoryFetchFailed(#[source] synergia_api::Error),
+    CategoryFetchFailed(#[source] CacheComputeError),
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -59,42 +58,34 @@ pub struct Categories {
 #[derive(Debug, Clone)]
 pub struct CategoriesRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
-    cache: Arc<Cache>,
-    sync: Arc<RwLock<()>>,
+    cache: Arc<AutoKeyedCache<CategoryId, Category>>,
 }
 
 impl CategoriesRepository {
-    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>, cache: Arc<Cache>) -> Self {
+    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
         Self {
             synergia_api,
-            cache,
-            sync: Arc::new(RwLock::new(())),
+            cache: Arc::new(AutoKeyedCache::new()),
         }
     }
 
     pub async fn category(&self, id: CategoryId) -> Result<Category, Error> {
-        {
-            let _guard = self.sync.read().await; // because the cache will have the data when we
-                                                 // get the read handle if it didn't previously
-            if let Some(category) = self.cache.categories.read().await.get(&id) {
-                return Ok(category.clone());
-            }
+        if let Some(category) = self.cache.get(&id).await {
+            return Ok(category);
         }
 
-        let _guard = self.sync.write().await;
-        let categories = self
-            .synergia_api
-            .categories()
+        self.cache
+            .try_bulk_insert_with(async {
+                let categories = self.synergia_api.categories().await?;
+                Ok::<_, synergia_api::Error>(categories.inner)
+            })
             .await
             .map_err(|e| Error::CategoryFetchFailed(e))?;
-        self.cache.categories.write_values(categories.inner).await;
 
         Ok(self
             .cache
-            .categories
-            .read()
-            .await
             .get(&id)
+            .await
             .ok_or(Error::CategoryNotFound(id))?
             .clone())
     }

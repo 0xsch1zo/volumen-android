@@ -1,35 +1,18 @@
-use std::{collections::HashMap, fmt::Debug, hash::Hash};
+use std::{fmt::Debug, future::Future, hash::Hash, sync::Arc};
 
+use futures::stream::{self, StreamExt};
+use moka::future::Cache;
 use thiserror::Error;
-use tokio::sync::{RwLock, RwLockReadGuard};
 
-use crate::repositories::{
-    categories::{Category, CategoryId},
-    grades::{Comment, CommentId},
-    subjects::{Subject, SubjectId},
-    users::{User, UserId},
-};
+use crate::sync::SingleParallelFlight;
 
-#[derive(Error, Debug)]
-#[error("cache entry not found")]
-pub struct CacheEntryNotFoudError;
+#[derive(Error, Clone, Debug)]
+#[error("an error occured while computing the value of a cache entry")]
+pub struct CacheComputeError(#[source] Arc<dyn std::error::Error + Sync + Send + 'static>);
 
-#[derive(Debug)]
-pub struct Cache {
-    pub users: KeyedCacheResource<UserId, User>,
-    pub subjects: KeyedCacheResource<SubjectId, Subject>,
-    pub categories: KeyedCacheResource<CategoryId, Category>,
-    pub comments: KeyedCacheResource<CommentId, Comment>,
-}
-
-impl Cache {
-    pub fn new() -> Self {
-        Self {
-            users: KeyedCacheResource::new(),
-            subjects: KeyedCacheResource::new(),
-            categories: KeyedCacheResource::new(),
-            comments: KeyedCacheResource::new(),
-        }
+impl CacheComputeError {
+    pub fn from_err<E: std::error::Error + Sync + Send + 'static>(err: E) -> Self {
+        Self(Arc::new(err))
     }
 }
 
@@ -37,37 +20,103 @@ pub trait Keyable<K: Copy + Hash + Eq> {
     fn key(&self) -> K;
 }
 
-#[derive(Debug)]
-pub struct KeyedCacheResource<K: Copy + Hash + Eq, V: Keyable<K>> {
-    resource: RwLock<HashMap<K, V>>,
+#[derive(Debug, Clone)]
+#[allow(unused)]
+pub struct AutoKeyedCache<
+    K: Send + Sync + Clone + Copy + Hash + Eq + 'static,
+    V: Send + Sync + Clone + Keyable<K> + 'static,
+> {
+    cache: Cache<K, V>,
+    get_with_worker: Arc<SingleParallelFlight<V>>,
+    try_get_with_worker: Arc<SingleParallelFlight<Result<V, CacheComputeError>>>,
+    bulk_insert_worker: Arc<SingleParallelFlight<()>>,
+    try_bulk_insert_worker: Arc<SingleParallelFlight<Result<(), CacheComputeError>>>,
 }
 
-impl<K: Copy + Hash + Eq, V: Keyable<K>> KeyedCacheResource<K, V> {
-    fn new() -> Self {
+impl<
+        K: Send + Sync + Clone + Copy + Hash + Eq + 'static,
+        V: Send + Sync + Clone + Keyable<K> + 'static,
+    > AutoKeyedCache<K, V>
+{
+    pub fn new() -> Self {
         Self {
-            resource: RwLock::new(HashMap::new()),
+            cache: Cache::builder().build(),
+            get_with_worker: Arc::new(SingleParallelFlight::new()),
+            try_get_with_worker: Arc::new(SingleParallelFlight::new()),
+            bulk_insert_worker: Arc::new(SingleParallelFlight::new()),
+            try_bulk_insert_worker: Arc::new(SingleParallelFlight::new()),
         }
     }
 
-    pub async fn read(&self) -> RwLockReadGuard<HashMap<K, V>> {
-        self.resource.read().await
+    pub async fn get(&self, key: &K) -> Option<V> {
+        self.cache.get(key).await
     }
 
-    pub async fn write(&self, key: K, value: V) -> Result<(), CacheEntryNotFoudError> {
-        self.resource
-            .write()
+    pub async fn insert(&self, value: V) {
+        self.cache.insert(value.key(), value).await;
+    }
+
+    // There is an implementation of try_get_with in moka already, but to provide consistent behaviour
+    // we're rolling our own. What could possible go wrong?
+    #[allow(unused)]
+    pub async fn get_with(&self, key: &K, init: impl Future<Output = V>) -> V {
+        if let Some(v) = self.get(key).await {
+            return v;
+        }
+        self.get_with_worker
+            .work(async || {
+                let value = init.await;
+                self.insert(value.clone()).await;
+                value
+            })
             .await
-            .insert(key, value)
-            .map(|_| ())
-            .ok_or(CacheEntryNotFoudError)
     }
 
-    pub async fn write_values<C: IntoIterator<Item = V>>(&self, new_values: C) {
-        let new_resource = new_values
-            .into_iter()
-            .map(|r| (r.key(), r))
-            .collect::<HashMap<_, _>>();
-        let mut resource_lock = self.resource.write().await;
-        *resource_lock = new_resource;
+    pub async fn try_get_with<E: std::error::Error + Send + Sync + 'static>(
+        &self,
+        key: &K,
+        init: impl Future<Output = Result<V, E>>,
+    ) -> Result<V, CacheComputeError> {
+        if let Some(v) = self.get(key).await {
+            return Ok(v);
+        }
+        let v = self
+            .try_get_with_worker
+            .work(async || {
+                let value = init.await.map_err(CacheComputeError::from_err)?;
+                self.insert(value.clone()).await;
+                Ok(value)
+            })
+            .await?;
+        Ok(v)
+    }
+
+    #[allow(unused)]
+    pub async fn bulk_insert_with(&self, init: impl Future<Output = impl IntoIterator<Item = V>>) {
+        self.bulk_insert_worker
+            .work(async || {
+                stream::iter(init.await.into_iter())
+                    .for_each(async |v: V| {
+                        self.cache.insert(v.key(), v).await;
+                    })
+                    .await;
+            })
+            .await;
+    }
+
+    pub async fn try_bulk_insert_with<E: std::error::Error + Send + Sync + 'static>(
+        &self,
+        init: impl Future<Output = Result<impl IntoIterator<Item = V>, E>>,
+    ) -> Result<(), CacheComputeError> {
+        self.try_bulk_insert_worker
+            .work(async || {
+                stream::iter(init.await.map_err(CacheComputeError::from_err)?.into_iter())
+                    .for_each(async |v: V| {
+                        self.cache.insert(v.key(), v).await;
+                    })
+                    .await;
+                Ok(())
+            })
+            .await
     }
 }

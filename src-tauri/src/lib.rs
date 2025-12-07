@@ -16,6 +16,7 @@ mod error;
 mod net;
 mod repositories;
 mod state;
+mod sync;
 
 #[cfg(debug_assertions)]
 const fn is_debug() -> bool {

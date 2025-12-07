@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    cache::{Cache, Keyable},
+    cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
@@ -17,7 +17,7 @@ pub enum Error {
     #[error("comment with id: {0:?}, not found")]
     CommentNotFound(CommentId),
     #[error("failed to fetch comment with id: {1:?}")]
-    CommentFetchFailed(#[source] synergia_api::Error, CommentId),
+    CommentFetchFailed(#[source] CacheComputeError, CommentId),
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -54,29 +54,23 @@ impl Keyable<CommentId> for Comment {
 
 pub struct CommentsRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
-    cache: Arc<Cache>,
+    cache: AutoKeyedCache<CommentId, Comment>,
 }
 
 impl CommentsRepository {
     pub async fn comment(&self, id: CommentId) -> Result<Comment, Error> {
-        // we shouldn't need to ensure that one request goes out at a time since there the comments
-        // will not be fetched in a multithreaded scenario and even if they were they're still
-        // getting fetched by id, so they requests will probably be unique anyway
-        if let Some(comment) = self.cache.comments.read().await.get(&id) {
+        if let Some(comment) = self.cache.get(&id).await {
             return Ok(comment.clone());
         }
 
         let comment = self
-            .synergia_api
-            .comment(id)
+            .cache
+            .try_get_with(&id, async {
+                let comment = self.synergia_api.comment(id).await?;
+                Ok::<_, synergia_api::Error>(comment)
+            })
             .await
             .map_err(|e| Error::CommentFetchFailed(e, id))?;
-        self.cache
-            .comments
-            .write(id, comment.clone())
-            .await
-            .map_err(|_| Error::CommentNotFound(id))?;
-
         Ok(comment)
     }
 }
