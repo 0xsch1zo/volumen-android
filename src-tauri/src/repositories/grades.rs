@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
+    cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
@@ -24,14 +25,14 @@ pub mod comments;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("failed to fetch grades")]
-    GradeFetchFailed(#[source] synergia_api::Error),
+    GradeFetchFailed(#[source] CacheComputeError),
     #[error("failed to get subject")]
     FailedToGetSubject(#[source] subjects::Error),
     #[error("failed to get category")]
     FailedToGetCategory(#[source] categories::Error),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq, Hash)]
 #[serde(transparent)]
 pub struct GradeId(usize);
 
@@ -42,7 +43,7 @@ pub struct ShallowGrades {
     grades: Vec<ShallowGrade>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct ShallowGrade {
     id: GradeId,
@@ -60,6 +61,12 @@ pub struct ShallowGrade {
     is_semester_proposition: bool,
     is_final: bool,
     is_final_proposition: bool,
+}
+
+impl Keyable<GradeId> for ShallowGrade {
+    fn key(&self) -> GradeId {
+        self.id
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -165,6 +172,7 @@ pub struct GradesRepository {
     users: UsersRepository,
     subjects: SubjectsRepository,
     categories: CategoriesRepository,
+    cache: AutoKeyedCache<GradeId, ShallowGrade>,
 }
 
 impl GradesRepository {
@@ -178,17 +186,22 @@ impl GradesRepository {
             users,
             subjects,
             categories,
+            cache: AutoKeyedCache::new(),
         }
     }
 
     pub async fn grades(&self) -> Result<Vec<Grade>, Error> {
-        let shallow_grades = self
-            .synergia_api
-            .grades()
-            .await
-            .map_err(|e| Error::GradeFetchFailed(e))?;
+        if self.cache.iter().next().is_none() {
+            self.cache
+                .try_bulk_insert_with(async {
+                    Ok::<_, synergia_api::Error>(self.synergia_api.grades().await?.grades)
+                })
+                .await
+                .map_err(|e| Error::GradeFetchFailed(e))?;
+        }
+
         // TODO: figure out an optimal buffering amount
-        let grades = stream::iter(shallow_grades.grades)
+        let grades = stream::iter(self.cache.iter().map(|(_, v)| v))
             .map(async |s| self.assemble_grade(s).await)
             .buffer_unordered(10)
             .try_collect::<Vec<_>>()

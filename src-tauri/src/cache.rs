@@ -119,4 +119,8 @@ impl<
             })
             .await
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Arc<K>, V)> + use<'_, K, V> {
+        self.cache.iter()
+    }
 }
