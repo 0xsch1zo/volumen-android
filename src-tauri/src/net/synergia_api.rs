@@ -21,7 +21,7 @@ use crate::{
             account_selector::AccountSelector,
             auth_manager::AuthorizationManager,
             auth_middleware::AuthorizationMiddleware,
-            internal_types::{LoginAttrKinds, LoginAttrs, LoginRequest},
+            internal_types::{LoginAttrKinds, LoginAttrs, LoginRequest, RawComment},
             token_management::{AuthCode, TokenManager, TokenManagerError},
         },
         ErrorStatusMiddleware,
@@ -363,7 +363,8 @@ impl SynergiaApi<AuthenticatedState> {
 
     pub async fn comment(&self, id: CommentId) -> Result<Comment> {
         Ok(self
-            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Comments(id))
-            .await?)
+            .fetch_synergia_endpoint::<RawComment>(AuthenticatedSynergiaEndpoints::Comments(id))
+            .await?
+            .comment)
     }
 }

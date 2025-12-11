@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use futures::TryFutureExt;
-use log::debug;
 use reqwest::{multipart, Client};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use thiserror::Error;

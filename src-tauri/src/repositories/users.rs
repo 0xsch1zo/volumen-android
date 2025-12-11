@@ -50,7 +50,7 @@ impl Keyable<UserId> for User {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Users {
-    #[serde(rename = "users")]
+    #[serde(rename = "Users")]
     pub inner: Vec<User>,
 }
 

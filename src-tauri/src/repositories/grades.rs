@@ -11,9 +11,9 @@ use crate::{
         SynergiaApi,
     },
     repositories::{
-        grades::categories::CategoriesRepository,
+        grades::{categories::CategoriesRepository, comments::CommentsRepository},
         subjects::{self, Subject, SubjectId, SubjectsRepository},
-        users::{User, UserId, UsersRepository},
+        users::{self, User, UserId, UsersRepository},
     },
 };
 
@@ -26,10 +26,14 @@ pub mod comments;
 pub enum Error {
     #[error("failed to fetch grades")]
     GradeFetchFailed(#[source] CacheComputeError),
-    #[error("failed to get subject")]
-    FailedToGetSubject(#[source] subjects::Error),
-    #[error("failed to get category")]
-    FailedToGetCategory(#[source] categories::Error),
+    #[error("subject lookup failed")]
+    SubjectLookupError(#[source] subjects::Error),
+    #[error("category lookup failed")]
+    CategoryLookupError(#[source] categories::Error),
+    #[error("user lookup failed")]
+    UserLookupError(#[source] users::Error),
+    #[error("comment lookup failed")]
+    CommentLookupError(#[source] comments::Error),
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -161,6 +165,7 @@ impl Grade {
     }
 }
 
+#[derive(Debug)]
 pub struct GradeDetails {
     pub added_by: User,
     pub comments: Vec<Comment>,
@@ -169,6 +174,7 @@ pub struct GradeDetails {
 #[derive(Debug, Clone)]
 pub struct GradesRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
+    comments: CommentsRepository,
     users: UsersRepository,
     subjects: SubjectsRepository,
     categories: CategoriesRepository,
@@ -177,12 +183,14 @@ pub struct GradesRepository {
 
 impl GradesRepository {
     pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
+        let comments = CommentsRepository::new(Arc::clone(&synergia_api));
         let users = UsersRepository::new(Arc::clone(&synergia_api));
         let subjects = SubjectsRepository::new(Arc::clone(&synergia_api));
         let categories = CategoriesRepository::new(Arc::clone(&synergia_api));
 
         Self {
             synergia_api,
+            comments,
             users,
             subjects,
             categories,
@@ -197,7 +205,7 @@ impl GradesRepository {
                     Ok::<_, synergia_api::Error>(self.synergia_api.grades().await?.grades)
                 })
                 .await
-                .map_err(|e| Error::GradeFetchFailed(e))?;
+                .map_err(Error::GradeFetchFailed)?;
         }
 
         // TODO: figure out an optimal buffering amount
@@ -214,14 +222,34 @@ impl GradesRepository {
         let subject_fut = self
             .subjects
             .subject(shallow_grade.subject)
-            .map_err(|e| Error::FailedToGetSubject(e));
+            .map_err(Error::SubjectLookupError);
 
         let category_fut = self
             .categories
             .category(shallow_grade.category)
-            .map_err(|e| Error::FailedToGetCategory(e));
+            .map_err(Error::CategoryLookupError);
 
         let (subject, category) = tokio::try_join!(subject_fut, category_fut)?;
         Ok(Grade::from_shallow(shallow_grade, subject, category))
+    }
+
+    pub async fn details(&self, grade: &Grade) -> Result<GradeDetails, Error> {
+        let added_by_fut = self
+            .users
+            .user(grade.added_by)
+            .map_err(Error::UserLookupError);
+
+        let comments_repo = Arc::new(self.comments.clone());
+        let comments_fut = stream::iter(grade.comments.iter().cloned())
+            .then(|c| {
+                // Tauri will shoot you if you won't do otherwise
+                // Parallell deosnt' make sense here
+                let comments_repo = Arc::clone(&comments_repo);
+                async move { comments_repo.comment(c).await }
+            })
+            .try_collect::<Vec<_>>()
+            .map_err(Error::CommentLookupError);
+        let (added_by, comments) = tokio::try_join!(added_by_fut, comments_fut)?;
+        Ok(GradeDetails { added_by, comments })
     }
 }

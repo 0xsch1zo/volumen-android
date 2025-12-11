@@ -58,14 +58,14 @@ pub struct Categories {
 #[derive(Debug, Clone)]
 pub struct CategoriesRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
-    cache: Arc<AutoKeyedCache<CategoryId, Category>>,
+    cache: AutoKeyedCache<CategoryId, Category>,
 }
 
 impl CategoriesRepository {
     pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
         Self {
             synergia_api,
-            cache: Arc::new(AutoKeyedCache::new()),
+            cache: AutoKeyedCache::new(),
         }
     }
 

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     net::{synergia_api::AuthenticatedState, SynergiaApi},
     repositories::{
-        grades::{Grade, GradesRepository},
+        grades::{Grade, GradeDetails, GradesRepository},
         Result,
     },
 };
@@ -28,5 +28,9 @@ impl MainRepository {
 
     pub async fn grades(&self) -> Result<Vec<Grade>> {
         Ok(self.grades.grades().await?)
+    }
+
+    pub async fn grade_details(&self, grade: &Grade) -> Result<GradeDetails> {
+        Ok(self.grades.details(&grade).await?)
     }
 }

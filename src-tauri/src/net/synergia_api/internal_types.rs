@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::repositories::entities::SynergiaUserId;
+use crate::repositories::{entities::SynergiaUserId, grades::Comment};
 
 #[derive(Debug)]
 pub enum LoginAttrKinds {
@@ -101,4 +101,10 @@ impl SynergiaTokens {
     pub fn inner(&self) -> &HashMap<SynergiaUserId, SynergiaToken> {
         &self.inner
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct RawComment {
+    pub comment: Comment,
 }

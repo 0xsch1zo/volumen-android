@@ -14,8 +14,6 @@ use crate::{
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("comment with id: {0:?}, not found")]
-    CommentNotFound(CommentId),
     #[error("failed to fetch comment with id: {1:?}")]
     CommentFetchFailed(#[source] CacheComputeError, CommentId),
 }
@@ -52,12 +50,20 @@ impl Keyable<CommentId> for Comment {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct CommentsRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
     cache: AutoKeyedCache<CommentId, Comment>,
 }
 
 impl CommentsRepository {
+    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
+        Self {
+            synergia_api,
+            cache: AutoKeyedCache::new(),
+        }
+    }
+
     pub async fn comment(&self, id: CommentId) -> Result<Comment, Error> {
         if let Some(comment) = self.cache.get(&id).await {
             return Ok(comment.clone());
