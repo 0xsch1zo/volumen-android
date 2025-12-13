@@ -74,7 +74,7 @@ impl SubjectsRepository {
 
         self.cache
             .try_bulk_insert_with(async {
-                let subjects = self.synergia_api.subjects().await?;
+                let subjects = self.synergia_api.fetch_subjects().await?;
                 Ok::<_, synergia_api::Error>(subjects.inner)
             })
             .await

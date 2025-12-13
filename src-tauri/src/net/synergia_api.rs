@@ -18,6 +18,7 @@ use crate::{
     net::{
         self,
         synergia_api::{
+            self,
             account_selector::AccountSelector,
             auth_manager::AuthorizationManager,
             auth_middleware::AuthorizationMiddleware,
@@ -27,7 +28,7 @@ use crate::{
         ErrorStatusMiddleware,
     },
     repositories::{
-        grades::{Categories, Comment, CommentId, ShallowGrades},
+        grades::{categories, Categories, Comment, CommentId, ShallowGrades},
         subjects::Subjects,
         users::Users,
     },
@@ -269,25 +270,65 @@ impl SynergiaApi<UnauthenticatedState> {
 #[derive(Debug)]
 enum AuthenticatedSynergiaEndpoints {
     Users,
-    Grades,
     Subjects,
+    Grades(GradesEndpoints),
+    Messages(MessagesEndpoints),
+}
+
+impl AuthenticatedSynergiaEndpoints {
+    fn url(&self) -> Url {
+        match self {
+            AuthenticatedSynergiaEndpoints::Users => {
+                SYNERGIA_URL.join("/gateway/api/2.0/Users").unwrap()
+            }
+            AuthenticatedSynergiaEndpoints::Subjects => {
+                SYNERGIA_URL.join("/gateway/api/2.0/Subjects").unwrap()
+            }
+            AuthenticatedSynergiaEndpoints::Grades(grades) => grades.url(),
+            AuthenticatedSynergiaEndpoints::Messages(messages) => messages.url(),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum GradesEndpoints {
+    Grades,
     Categories,
     Comments(CommentId),
 }
 
-impl AuthenticatedSynergiaEndpoints {
-    fn path(&self) -> String {
-        match self {
-            AuthenticatedSynergiaEndpoints::Users => "/gateway/api/2.0/Users".to_owned(),
-            AuthenticatedSynergiaEndpoints::Grades => "/gateway/api/2.0/Grades".to_owned(),
-            AuthenticatedSynergiaEndpoints::Subjects => "/gateway/api/2.0/Subjects".to_owned(),
-            AuthenticatedSynergiaEndpoints::Categories => {
-                "/gateway/api/2.0/Grades/Categories".to_owned()
+impl GradesEndpoints {
+    fn url(&self) -> Url {
+        let endoint = match self {
+            GradesEndpoints::Grades => "/gateway/api/2.0/Grades",
+            GradesEndpoints::Categories => "/gateway/api/2.0/Grades/Categories",
+            GradesEndpoints::Comments(id) => {
+                &format!("/gateway/api/2.0/Grades/Comments/{}", id.inner())
             }
-            AuthenticatedSynergiaEndpoints::Comments(id) => {
-                format!("/gateway/api/2.0/Grades/Comments/{}", id.inner())
+        };
+        SYNERGIA_URL.join(endoint).unwrap()
+    }
+}
+
+#[derive(Debug)]
+enum MessagesEndpoints {
+    Recieved { page: usize, limit: usize },
+    Sent { page: usize, limit: usize },
+}
+
+impl MessagesEndpoints {
+    fn url(&self) -> Url {
+        const MESSAGES_URL: LazyCell<Url> =
+            LazyCell::new(|| Url::parse("https://wiadomosci.librus.pl").unwrap());
+        let endoint = match self {
+            MessagesEndpoints::Recieved { page, limit } => {
+                &format!("/api/inbox/messages?page={page}&limit={limit}")
             }
-        }
+            MessagesEndpoints::Sent { page, limit } => {
+                &format!("/api/outbox/messages?page={page}&limit={limit}")
+            }
+        };
+        MESSAGES_URL.join(endoint).unwrap()
     }
 }
 
@@ -309,7 +350,7 @@ impl SynergiaApi<AuthenticatedState> {
         let resource = self
             .state
             .client
-            .get(SYNERGIA_URL.join(&endpoint.path()).unwrap())
+            .get(endpoint.url())
             .send()
             .await?
             .json::<T>()
@@ -318,53 +359,71 @@ impl SynergiaApi<AuthenticatedState> {
         Ok(resource)
     }
 
-    // TODO: actually properly parse the data or something
-    pub async fn me(&self) -> Result<String> {
-        const ME_ENDPOINT: &str = "/3.0/Me";
-        debug!("fetching \"me\" info");
-        let text = self
-            .state
-            .client
-            .get(LIBRUS_API_URL.join(ME_ENDPOINT).unwrap())
-            .header("accept", "application/json")
-            .send()
-            .await?
-            .text()
-            .await?;
-        debug!("successfully fetched \"me\" info");
-        Ok(text)
-    }
-
     // fetch_synergia_endpoint isn't exposed because we don't want to let the user be able to
     // choose a wrong type for the output on accident
-    pub async fn users(&self) -> Result<Users> {
+    pub async fn fetch_users(&self) -> Result<Users> {
         Ok(self
             .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Users)
             .await?)
     }
 
-    pub async fn grades(&self) -> Result<ShallowGrades> {
-        Ok(self
-            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Grades)
-            .await?)
-    }
-
-    pub async fn subjects(&self) -> Result<Subjects> {
+    pub async fn fetch_subjects(&self) -> Result<Subjects> {
         Ok(self
             .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Subjects)
             .await?)
     }
 
-    pub async fn categories(&self) -> Result<Categories> {
+    pub fn grades(&self) -> GradesManager {
+        GradesManager::new(&self)
+    }
+}
+
+pub struct GradesManager<'a> {
+    synergia_api: &'a SynergiaApi<AuthenticatedState>,
+}
+
+impl<'a> GradesManager<'a> {
+    fn new(synergia_api: &'a SynergiaApi<AuthenticatedState>) -> Self {
+        Self { synergia_api }
+    }
+
+    pub async fn fetch_self(&self) -> Result<ShallowGrades> {
         Ok(self
-            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Categories)
+            .synergia_api
+            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Grades(
+                GradesEndpoints::Grades,
+            ))
             .await?)
     }
 
-    pub async fn comment(&self, id: CommentId) -> Result<Comment> {
+    pub async fn fetch_categories(&self) -> Result<Categories> {
         Ok(self
-            .fetch_synergia_endpoint::<RawComment>(AuthenticatedSynergiaEndpoints::Comments(id))
+            .synergia_api
+            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Grades(
+                GradesEndpoints::Categories,
+            ))
+            .await?)
+    }
+
+    pub async fn fetch_comment(&self, id: CommentId) -> Result<Comment> {
+        Ok(self
+            .synergia_api
+            .fetch_synergia_endpoint::<RawComment>(AuthenticatedSynergiaEndpoints::Grades(
+                GradesEndpoints::Comments(id),
+            ))
             .await?
             .comment)
     }
+}
+
+pub struct MessagesManager<'a> {
+    synergia_api: &'a SynergiaApi<AuthenticatedState>,
+}
+
+impl<'a> MessagesManager<'a> {
+    pub fn new(synergia_api: &'a SynergiaApi<AuthenticatedState>) -> Self {
+        Self { synergia_api }
+    }
+
+    //pub fn fetch_recieved()
 }

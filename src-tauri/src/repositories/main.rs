@@ -22,10 +22,6 @@ impl MainRepository {
         Self { grades }
     }
 
-    /*pub async fn me(&self) -> Result<String> {
-        Ok(self.synergia_api.me().await?)
-    }*/
-
     pub async fn grades(&self) -> Result<Vec<Grade>> {
         Ok(self.grades.grades().await?)
     }

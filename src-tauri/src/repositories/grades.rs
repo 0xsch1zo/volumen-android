@@ -202,7 +202,9 @@ impl GradesRepository {
         if self.cache.iter().next().is_none() {
             self.cache
                 .try_bulk_insert_with(async {
-                    Ok::<_, synergia_api::Error>(self.synergia_api.grades().await?.grades)
+                    Ok::<_, synergia_api::Error>(
+                        self.synergia_api.grades().fetch_self().await?.grades,
+                    )
                 })
                 .await
                 .map_err(Error::GradeFetchFailed)?;
@@ -243,7 +245,7 @@ impl GradesRepository {
         let comments_fut = stream::iter(grade.comments.iter().cloned())
             .then(|c| {
                 // Tauri will shoot you if you won't do otherwise
-                // Parallell deosnt' make sense here
+                // Parallell isn't worth it here
                 let comments_repo = Arc::clone(&comments_repo);
                 async move { comments_repo.comment(c).await }
             })

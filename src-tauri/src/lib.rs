@@ -5,7 +5,6 @@ use tauri::{async_runtime::Mutex, Manager, State};
 
 use crate::{
     error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt, StatefulResultExt},
-    repositories::{grades::GradeDetails, MainRepository},
     state::{
         AccountSelectionState, AppStates, AppStatesInner, AuthenticatedState, UnauthenticatedState,
     },
@@ -30,21 +29,6 @@ const fn is_debug() -> bool {
 }
 
 type Result<T, E = FrontendError> = std::result::Result<T, E>;
-
-async fn sed(main_repository: &MainRepository) -> Result<GradeDetails> {
-    let grades = main_repository
-        .grades()
-        .await
-        .into_app_result()
-        .log_on_err()?;
-
-    let details = main_repository
-        .grade_details(&grades.first().unwrap())
-        .await
-        .into_app_result()
-        .log_on_err()?;
-    Ok(details)
-}
 
 #[tauri::command]
 async fn send(state: State<'_, AppStates>, login: String, password: String) -> Result<String> {
@@ -94,7 +78,20 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .into_app_result()
         .log_on_err()?;
 
-    Ok(format!("{:?}", sed(&state.main_repository).await?))
+    let grades = state
+        .main_repository
+        .grades()
+        .await
+        .into_app_result()
+        .log_on_err()?;
+
+    let details = state
+        .main_repository
+        .grade_details(&grades.first().unwrap())
+        .await
+        .into_app_result()
+        .log_on_err()?;
+    Ok(format!("{:?}", details))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

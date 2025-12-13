@@ -76,7 +76,7 @@ impl CategoriesRepository {
 
         self.cache
             .try_bulk_insert_with(async {
-                let categories = self.synergia_api.categories().await?;
+                let categories = self.synergia_api.grades().fetch_categories().await?;
                 Ok::<_, synergia_api::Error>(categories.inner)
             })
             .await

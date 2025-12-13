@@ -72,7 +72,7 @@ impl CommentsRepository {
         let comment = self
             .cache
             .try_get_with(&id, async {
-                let comment = self.synergia_api.comment(id).await?;
+                let comment = self.synergia_api.grades().fetch_comment(id).await?;
                 Ok::<_, synergia_api::Error>(comment)
             })
             .await

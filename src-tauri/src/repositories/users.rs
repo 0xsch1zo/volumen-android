@@ -75,7 +75,7 @@ impl UsersRepository {
 
         self.cache
             .try_bulk_insert_with(async {
-                Ok::<_, synergia_api::Error>(self.synergia_api.users().await?.inner)
+                Ok::<_, synergia_api::Error>(self.synergia_api.fetch_users().await?.inner)
             })
             .await
             .map_err(|e| Error::UserFetchError(e))?;
