@@ -1,12 +1,35 @@
+use serde::Serialize;
+
 use crate::{
     error::StatefulResultExt,
     net::synergia_api::account_selector::AccountSelector,
-    repositories::{
-        entities::{SynergiaAccounts, SynergiaUserId},
-        main::MainRepository,
-        Result, StatefulError,
-    },
+    repositories::{main::MainRepository, Result, StatefulError},
 };
+
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct SynergiaUserId(usize);
+
+impl SynergiaUserId {
+    pub fn new(_0: usize) -> Self {
+        Self(_0)
+    }
+
+    pub fn into_inner(self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct SynergiaAccount {
+    pub id: SynergiaUserId,
+    pub group: String,
+    pub login: String,
+    pub student_name: String,
+    pub state: String,
+}
+
+pub type SynergiaAccounts = Vec<SynergiaAccount>;
 
 #[derive(Debug)]
 pub struct AccountSelectionRepository {

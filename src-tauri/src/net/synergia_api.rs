@@ -18,17 +18,21 @@ use crate::{
     net::{
         self,
         synergia_api::{
-            self,
             account_selector::AccountSelector,
+            api::{
+                auth::{LoginAttrKinds, LoginAttrs, LoginRequest},
+                grades::{CategoriesResponse, CommentResponse, GradesResponse},
+                subjects::SubjectsResponse,
+                users::UsersResponse,
+            },
             auth_manager::AuthorizationManager,
             auth_middleware::AuthorizationMiddleware,
-            internal_types::{LoginAttrKinds, LoginAttrs, LoginRequest, RawComment},
             token_management::{AuthCode, TokenManager, TokenManagerError},
         },
         ErrorStatusMiddleware,
     },
     repositories::{
-        grades::{categories, Categories, Comment, CommentId, ShallowGrades},
+        grades::{Categories, Comment, CommentId, ShallowGrades},
         subjects::Subjects,
         users::Users,
     },
@@ -36,9 +40,9 @@ use crate::{
 };
 
 pub mod account_selector;
+mod api;
 mod auth_manager;
 mod auth_middleware;
-mod internal_types;
 mod token_management;
 
 const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.librus.pl").unwrap());
@@ -363,14 +367,16 @@ impl SynergiaApi<AuthenticatedState> {
     // choose a wrong type for the output on accident
     pub async fn fetch_users(&self) -> Result<Users> {
         Ok(self
-            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Users)
-            .await?)
+            .fetch_synergia_endpoint::<UsersResponse>(AuthenticatedSynergiaEndpoints::Users)
+            .await?
+            .into())
     }
 
     pub async fn fetch_subjects(&self) -> Result<Subjects> {
         Ok(self
-            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Subjects)
-            .await?)
+            .fetch_synergia_endpoint::<SubjectsResponse>(AuthenticatedSynergiaEndpoints::Subjects)
+            .await?
+            .into())
     }
 
     pub fn grades(&self) -> GradesManager {
@@ -390,29 +396,31 @@ impl<'a> GradesManager<'a> {
     pub async fn fetch_self(&self) -> Result<ShallowGrades> {
         Ok(self
             .synergia_api
-            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Grades(
+            .fetch_synergia_endpoint::<GradesResponse>(AuthenticatedSynergiaEndpoints::Grades(
                 GradesEndpoints::Grades,
             ))
-            .await?)
+            .await?
+            .into())
     }
 
     pub async fn fetch_categories(&self) -> Result<Categories> {
         Ok(self
             .synergia_api
-            .fetch_synergia_endpoint(AuthenticatedSynergiaEndpoints::Grades(
+            .fetch_synergia_endpoint::<CategoriesResponse>(AuthenticatedSynergiaEndpoints::Grades(
                 GradesEndpoints::Categories,
             ))
-            .await?)
+            .await?
+            .into())
     }
 
     pub async fn fetch_comment(&self, id: CommentId) -> Result<Comment> {
         Ok(self
             .synergia_api
-            .fetch_synergia_endpoint::<RawComment>(AuthenticatedSynergiaEndpoints::Grades(
+            .fetch_synergia_endpoint::<CommentResponse>(AuthenticatedSynergiaEndpoints::Grades(
                 GradesEndpoints::Comments(id),
             ))
             .await?
-            .comment)
+            .into())
     }
 }
 

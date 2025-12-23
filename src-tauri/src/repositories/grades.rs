@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -36,35 +36,32 @@ pub enum Error {
     CommentLookupError(#[source] comments::Error),
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Serialize, Clone, Copy, Debug, Eq, PartialEq, Hash)]
 #[serde(transparent)]
 pub struct GradeId(usize);
 
-// TODO: move this dogshit into synergia_api
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct ShallowGrades {
-    grades: Vec<ShallowGrade>,
+impl GradeId {
+    pub fn new(_0: usize) -> Self {
+        Self(_0)
+    }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Serialize, Clone, Debug)]
 pub struct ShallowGrade {
-    id: GradeId,
-    subject: SubjectId,
-    category: CategoryId,
-    added_by: UserId,
-    #[serde(default)]
-    comments: Vec<CommentId>,
-    grade: String,
-    date: String,
-    add_date: String,
-    semester: usize,
-    is_constituent: bool,
-    is_semester: bool,
-    is_semester_proposition: bool,
-    is_final: bool,
-    is_final_proposition: bool,
+    pub id: GradeId,
+    pub subject: SubjectId,
+    pub category: CategoryId,
+    pub added_by: UserId,
+    pub comments: Vec<CommentId>,
+    pub grade: String,
+    pub date: String,
+    pub add_date: String,
+    pub semester: usize,
+    pub is_constituent: bool,
+    pub is_semester: bool,
+    pub is_semester_proposition: bool,
+    pub is_final: bool,
+    pub is_final_proposition: bool,
 }
 
 impl Keyable<GradeId> for ShallowGrade {
@@ -73,7 +70,9 @@ impl Keyable<GradeId> for ShallowGrade {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+pub type ShallowGrades = Vec<ShallowGrade>;
+
+#[derive(Serialize, Debug)]
 pub enum GradeKind {
     Constituent,
     Semester,
@@ -134,7 +133,7 @@ impl GradeKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 pub struct Grade {
     id: GradeId,
     added_by: UserId,
@@ -147,11 +146,40 @@ pub struct Grade {
     pub kind: GradeKind,
 }
 
-impl Grade {
-    fn from_shallow(shallow: ShallowGrade, subject: Subject, category: Category) -> Self {
-        assert_eq!(shallow.subject, subject.id);
-        assert_eq!(shallow.category, category.id);
-        Grade {
+#[derive(Debug)]
+pub struct GradeDetails {
+    pub added_by: User,
+    pub comments: Vec<Comment>,
+}
+struct GradesFactory<'a> {
+    subject_repo: &'a SubjectsRepository,
+    categories_repo: &'a CategoriesRepository,
+}
+
+impl<'a> GradesFactory<'a> {
+    fn new(
+        subject_repo: &'a SubjectsRepository,
+        categories_repo: &'a CategoriesRepository,
+    ) -> Self {
+        Self {
+            subject_repo,
+            categories_repo,
+        }
+    }
+
+    async fn create_from_shallow(&self, shallow: ShallowGrade) -> Result<Grade, Error> {
+        let subject_fut = self
+            .subject_repo
+            .subject(shallow.subject)
+            .map_err(Error::SubjectLookupError);
+
+        let category_fut = self
+            .categories_repo
+            .category(shallow.category)
+            .map_err(Error::CategoryLookupError);
+
+        let (subject, category) = tokio::try_join!(subject_fut, category_fut)?;
+        Ok(Grade {
             kind: GradeKind::from_shallow_grade(&shallow),
             id: shallow.id,
             add_date: shallow.add_date,
@@ -161,14 +189,8 @@ impl Grade {
             subject,
             date: shallow.date,
             grade: shallow.grade,
-        }
+        })
     }
-}
-
-#[derive(Debug)]
-pub struct GradeDetails {
-    pub added_by: User,
-    pub comments: Vec<Comment>,
 }
 
 #[derive(Debug, Clone)]
@@ -202,37 +224,21 @@ impl GradesRepository {
         if self.cache.iter().next().is_none() {
             self.cache
                 .try_bulk_insert_with(async {
-                    Ok::<_, synergia_api::Error>(
-                        self.synergia_api.grades().fetch_self().await?.grades,
-                    )
+                    Ok::<_, synergia_api::Error>(self.synergia_api.grades().fetch_self().await?)
                 })
                 .await
                 .map_err(Error::GradeFetchFailed)?;
         }
 
+        let grades_factory = GradesFactory::new(&self.subjects, &self.categories);
         // TODO: figure out an optimal buffering amount
         let grades = stream::iter(self.cache.iter().map(|(_, v)| v))
-            .map(async |s| self.assemble_grade(s).await)
+            .map(async |s| grades_factory.create_from_shallow(s).await)
             .buffer_unordered(10)
             .try_collect::<Vec<_>>()
             .await?;
 
         Ok(grades)
-    }
-
-    async fn assemble_grade(&self, shallow_grade: ShallowGrade) -> Result<Grade, Error> {
-        let subject_fut = self
-            .subjects
-            .subject(shallow_grade.subject)
-            .map_err(Error::SubjectLookupError);
-
-        let category_fut = self
-            .categories
-            .category(shallow_grade.category)
-            .map_err(Error::CategoryLookupError);
-
-        let (subject, category) = tokio::try_join!(subject_fut, category_fut)?;
-        Ok(Grade::from_shallow(shallow_grade, subject, category))
     }
 
     pub async fn details(&self, grade: &Grade) -> Result<GradeDetails, Error> {

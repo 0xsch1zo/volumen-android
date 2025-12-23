@@ -7,7 +7,6 @@ use crate::{
 };
 
 pub mod account_selection;
-pub mod entities;
 pub mod grades;
 pub mod login;
 pub mod main;

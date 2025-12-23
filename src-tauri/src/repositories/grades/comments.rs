@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -9,7 +9,6 @@ use crate::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
     },
-    repositories::entities::Reference,
 };
 
 #[derive(Error, Debug)]
@@ -18,27 +17,20 @@ pub enum Error {
     CommentFetchFailed(#[source] CacheComputeError, CommentId),
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq, Debug)]
-#[serde(from = "Reference")]
+#[derive(Serialize, Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub struct CommentId(usize);
 
 impl CommentId {
+    pub fn new(_0: usize) -> Self {
+        Self(_0)
+    }
+
     pub fn inner(&self) -> usize {
         self.0
     }
 }
 
-impl From<Reference> for CommentId {
-    fn from(value: Reference) -> Self {
-        Self(match value {
-            Reference::Linked { id, .. } => id,
-            Reference::Standalone(id) => id,
-        })
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Serialize, Clone, Debug)]
 pub struct Comment {
     pub id: CommentId,
     pub text: String,

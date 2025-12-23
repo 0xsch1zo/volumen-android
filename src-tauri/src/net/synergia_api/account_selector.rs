@@ -6,13 +6,14 @@ use crate::{
     error::StatefulResultExt,
     net::{
         synergia_api::{
+            api::auth::SynergiaAccounts,
             auth_manager::AuthorizationManager,
             token_management::{TokenManager, TokenManagerError, TokenPicker, TokenPickerError},
             AuthenticatedState, StatefulError, PORTAL_URL,
         },
         ErrorStatusMiddleware, SynergiaApi,
     },
-    repositories::entities::{SynergiaAccounts, SynergiaUserId},
+    repositories::account_selection::{SynergiaAccounts as ModelSynergiaAccounts, SynergiaUserId},
 };
 
 #[derive(Error, Debug)]
@@ -43,12 +44,13 @@ impl AccountSelector {
         self,
         id: SynergiaUserId,
     ) -> Result<SynergiaApi<AuthenticatedState>, StatefulError<Self>> {
-        let auth_manager = AuthorizationManager::new(self.token_manager, TokenPicker::new(id));
+        let auth_manager =
+            AuthorizationManager::new(self.token_manager, TokenPicker::new(id.into()));
         SynergiaApi::<AuthenticatedState>::try_from_auth_manager(auth_manager)
             .map_err_state(|s| Self::new(s.into()))
     }
 
-    pub async fn accounts(&self) -> Result<SynergiaAccounts> {
+    pub async fn accounts(&self) -> Result<ModelSynergiaAccounts> {
         const SYNERGIA_ACCOUNT_ENDPOINT: &str = "/api/v3/SynergiaAccounts";
         let portal_access_token = &self
             .token_manager
@@ -69,6 +71,6 @@ impl AccountSelector {
             .await?
             .json::<SynergiaAccounts>()
             .await?;
-        Ok(accounts)
+        Ok(accounts.into())
     }
 }

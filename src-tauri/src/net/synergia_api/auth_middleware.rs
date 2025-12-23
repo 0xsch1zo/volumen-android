@@ -12,8 +12,8 @@ use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
 
 use crate::net::synergia_api::{
+    api::auth::{PortalAccessToken, SynergiaToken},
     auth_manager::{AuthorizationManager, AuthorizationManagerError},
-    internal_types::{PortalAccessToken, SynergiaToken},
     token_management::PickedToken,
 };
 

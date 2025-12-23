@@ -10,15 +10,14 @@ use url::Url;
 use crate::{
     net::{
         synergia_api::{
-            internal_types::{
+            api::auth::{
                 PortalAccessToken, PortalRefreshToken, PortalTokenPair, SynergiaToken,
-                SynergiaTokens,
+                SynergiaTokens, SynergiaUserId,
             },
             LIBRUS_API_URL, PORTAL_URL, SYNERGIA_URL,
         },
         ErrorStatusMiddleware, IsSameBaseExt,
     },
-    repositories::entities::SynergiaUserId,
     sync::SingleParallelFlight,
 };
 

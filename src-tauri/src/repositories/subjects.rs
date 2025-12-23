@@ -6,9 +6,8 @@ use crate::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
     },
-    repositories::entities::Reference,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -19,21 +18,17 @@ pub enum Error {
     SubjectFetchFailed(#[source] CacheComputeError),
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq, Debug)]
-#[serde(from = "Reference")]
+#[derive(Serialize, Clone, Copy, Hash, PartialEq, Eq, Debug)]
+#[serde(transparent)]
 pub struct SubjectId(usize);
 
-impl From<Reference> for SubjectId {
-    fn from(value: Reference) -> Self {
-        Self(match value {
-            Reference::Linked { id, .. } => id,
-            Reference::Standalone(id) => id,
-        })
+impl SubjectId {
+    pub fn new(_0: usize) -> Self {
+        Self(_0)
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Serialize, Clone, Debug)]
 pub struct Subject {
     pub id: SubjectId,
     pub name: String,
@@ -47,11 +42,7 @@ impl Keyable<SubjectId> for Subject {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Subjects {
-    #[serde(rename = "Subjects")]
-    pub inner: Vec<Subject>,
-}
+pub type Subjects = Vec<Subject>;
 
 #[derive(Debug, Clone)]
 pub struct SubjectsRepository {
@@ -75,7 +66,7 @@ impl SubjectsRepository {
         self.cache
             .try_bulk_insert_with(async {
                 let subjects = self.synergia_api.fetch_subjects().await?;
-                Ok::<_, synergia_api::Error>(subjects.inner)
+                Ok::<_, synergia_api::Error>(subjects)
             })
             .await
             .map_err(|e| Error::SubjectFetchFailed(e))?;

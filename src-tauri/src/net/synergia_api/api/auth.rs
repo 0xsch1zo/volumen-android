@@ -1,9 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-
-use crate::repositories::{entities::SynergiaUserId, grades::Comment};
-
+use crate::repositories::account_selection as models;
 #[derive(Debug)]
 pub enum LoginAttrKinds {
     RedirectTo,
@@ -28,6 +26,57 @@ pub struct LoginRequest {
     pub attrs: LoginAttrs,
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+#[serde(transparent)]
+pub struct SynergiaUserId(usize);
+
+impl From<SynergiaUserId> for models::SynergiaUserId {
+    fn from(value: SynergiaUserId) -> Self {
+        Self::new(value.0)
+    }
+}
+
+impl From<models::SynergiaUserId> for SynergiaUserId {
+    fn from(value: models::SynergiaUserId) -> Self {
+        Self(value.into_inner())
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SynergiaAccount {
+    pub id: SynergiaUserId,
+    pub group: String,
+    pub login: String,
+    pub student_name: String,
+    pub state: String,
+}
+
+impl From<SynergiaAccount> for models::SynergiaAccount {
+    fn from(value: SynergiaAccount) -> Self {
+        Self {
+            id: value.id.into(),
+            group: value.group,
+            login: value.login,
+            student_name: value.student_name,
+            state: value.state,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SynergiaAccounts {
+    pub accounts: Vec<SynergiaAccount>,
+}
+
+impl From<SynergiaAccounts> for models::SynergiaAccounts {
+    fn from(value: SynergiaAccounts) -> Self {
+        value.accounts.into_iter().map(Into::into).collect()
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 #[serde(transparent)]
@@ -50,7 +99,6 @@ impl PortalRefreshToken {
     }
 }
 
-// TODO: figure out whre to put types
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PortalTokenPair {
     pub access_token: PortalAccessToken,
@@ -101,10 +149,4 @@ impl SynergiaTokens {
     pub fn inner(&self) -> &HashMap<SynergiaUserId, SynergiaToken> {
         &self.inner
     }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "PascalCase")]
-pub struct RawComment {
-    pub comment: Comment,
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -9,7 +9,6 @@ use crate::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
     },
-    repositories::entities::Reference,
 };
 
 #[derive(Error, Debug)]
@@ -20,38 +19,29 @@ pub enum Error {
     UserFetchError(#[source] CacheComputeError),
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone, Copy)]
-#[serde(from = "Reference")]
+#[derive(Serialize, Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[serde(transparent)]
 pub struct UserId(usize);
 
-impl From<Reference> for UserId {
-    fn from(value: Reference) -> Self {
-        Self(match value {
-            Reference::Linked { id, .. } => id,
-            Reference::Standalone(id) => id,
-        })
+impl UserId {
+    pub fn new(_0: usize) -> Self {
+        Self(_0)
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Serialize, Clone, Debug)]
 pub struct User {
     pub id: UserId,
     pub first_name: String,
     pub last_name: String,
 }
 
+pub type Users = Vec<User>;
+
 impl Keyable<UserId> for User {
     fn key(&self) -> UserId {
         self.id
     }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "PascalCase")]
-pub struct Users {
-    #[serde(rename = "Users")]
-    pub inner: Vec<User>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,7 +65,7 @@ impl UsersRepository {
 
         self.cache
             .try_bulk_insert_with(async {
-                Ok::<_, synergia_api::Error>(self.synergia_api.fetch_users().await?.inner)
+                Ok::<_, synergia_api::Error>(self.synergia_api.fetch_users().await?)
             })
             .await
             .map_err(|e| Error::UserFetchError(e))?;

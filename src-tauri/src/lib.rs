@@ -57,8 +57,7 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .accounts()
         .await
         .into_app_result()
-        .log_on_err()?
-        .inner;
+        .log_on_err()?;
 
     state_lock
         .state_transition::<AccountSelectionState, AuthenticatedState>(async |s| {

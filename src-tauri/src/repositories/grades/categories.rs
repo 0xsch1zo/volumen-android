@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -9,7 +9,6 @@ use crate::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
     },
-    repositories::entities::Reference,
 };
 
 #[derive(Error, Debug)]
@@ -20,21 +19,17 @@ pub enum Error {
     CategoryFetchFailed(#[source] CacheComputeError),
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq, Debug)]
-#[serde(from = "Reference")]
+#[derive(Serialize, Clone, Copy, Hash, PartialEq, Eq, Debug)]
+#[serde(transparent)]
 pub struct CategoryId(usize);
 
-impl From<Reference> for CategoryId {
-    fn from(value: Reference) -> Self {
-        Self(match value {
-            Reference::Linked { id, .. } => id,
-            Reference::Standalone(id) => id,
-        })
+impl CategoryId {
+    pub fn new(_0: usize) -> Self {
+        Self(_0)
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Serialize, Clone, Debug)]
 pub struct Category {
     pub id: CategoryId,
     pub name: String,
@@ -48,12 +43,7 @@ impl Keyable<CategoryId> for Category {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "PascalCase")]
-pub struct Categories {
-    #[serde(rename = "Categories")]
-    pub inner: Vec<Category>,
-}
+pub type Categories = Vec<Category>;
 
 #[derive(Debug, Clone)]
 pub struct CategoriesRepository {
@@ -77,7 +67,7 @@ impl CategoriesRepository {
         self.cache
             .try_bulk_insert_with(async {
                 let categories = self.synergia_api.grades().fetch_categories().await?;
-                Ok::<_, synergia_api::Error>(categories.inner)
+                Ok::<_, synergia_api::Error>(categories)
             })
             .await
             .map_err(|e| Error::CategoryFetchFailed(e))?;
