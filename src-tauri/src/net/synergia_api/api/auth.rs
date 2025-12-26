@@ -150,3 +150,26 @@ impl SynergiaTokens {
         &self.inner
     }
 }
+
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct AuthCode(String);
+
+impl AuthCode {
+    pub fn new(code: String) -> Self {
+        Self(code)
+    }
+    pub fn as_inner(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Tokens {
+    pub portal_token_pair: PortalTokenPair,
+    pub synergia_tokens: SynergiaTokens,
+}

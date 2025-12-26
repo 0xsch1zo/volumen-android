@@ -134,6 +134,8 @@ impl<T, S: Sized, E> StatefulResultExt<T, S, E> for std::result::Result<T, State
     }
 }
 
+// FIXME: the name of this macro is atrocious, change it, or even better get rid of this dogshit in
+// the first place
 #[macro_export]
 macro_rules! stateful_result {
     ($state:expr => $res:expr) => {

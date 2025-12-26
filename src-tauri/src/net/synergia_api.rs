@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::LazyCell, sync::Arc};
+use std::{borrow::Cow, cell::LazyCell};
 
 use itertools::Itertools;
 use log::{debug, warn};
@@ -18,16 +18,16 @@ use crate::{
     net::{
         self,
         synergia_api::{
-            account_selector::AccountSelector,
+            account_selector::{AccountSelector, AccountSelectorError},
             api::{
-                auth::{LoginAttrKinds, LoginAttrs, LoginRequest},
+                auth::{AuthCode, LoginAttrKinds, LoginAttrs, LoginRequest},
                 grades::{CategoriesResponse, CommentResponse, GradesResponse},
                 subjects::SubjectsResponse,
                 users::UsersResponse,
             },
             auth_manager::AuthorizationManager,
             auth_middleware::AuthorizationMiddleware,
-            token_management::{AuthCode, TokenManager, TokenManagerError},
+            token_management::{TokensApi, TokensApiError},
         },
         ErrorStatusMiddleware,
     },
@@ -43,15 +43,12 @@ pub mod account_selector;
 mod api;
 mod auth_manager;
 mod auth_middleware;
-mod token_management;
+pub mod token_management;
 
 const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.librus.pl").unwrap());
 
 const SYNERGIA_URL: LazyCell<Url> =
     LazyCell::new(|| Url::parse("https://synergia.librus.pl").unwrap());
-
-const LIBRUS_API_URL: LazyCell<Url> =
-    LazyCell::new(|| Url::parse("https://api.librus.pl").unwrap());
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -71,8 +68,10 @@ pub enum Error {
     AuthCodeNotFound,
     #[error("invalid header value")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
-    #[error("failed to initalize token manager")]
-    TokenManagerInitFailed(#[from] TokenManagerError),
+    #[error("token fetch error")]
+    TokenFetchError(#[source] TokensApiError),
+    #[error("account selector construction error")]
+    AccountSelectorConstructionError(#[source] AccountSelectorError),
     #[error("auth middleware error")]
     AuthMiddlewareError(#[from] auth_middleware::Error),
 }
@@ -131,9 +130,7 @@ impl AuthenticatedState {
 
         Ok(ClientBuilder::new(reqwest_client)
             .with(ErrorStatusMiddleware)
-            .with(AuthorizationMiddleware::new(Arc::new(
-                authorization_manager,
-            )))
+            .with(AuthorizationMiddleware::new(authorization_manager))
             .build())
     }
 }
@@ -260,14 +257,23 @@ impl SynergiaApi<UnauthenticatedState> {
                     attrs,
                 })
                 .await
+                .map(AuthCode::new)
         };
 
-        let token_manager = stateful_result! { self =>
-            TokenManager::with_authorized(AuthCode::new(&auth_code)).await
-        };
         debug!("successfully logged in");
 
-        Ok(AccountSelector::new(token_manager))
+        let tokens_api = TokensApi::new();
+        let tokens = stateful_result! { self =>
+            tokens_api
+                .fetch_tokens(auth_code)
+                .await
+                .map_err(Error::TokenFetchError)
+        };
+
+        Ok(stateful_result! { self =>
+            AccountSelector::try_new(tokens, tokens_api)
+                .map_err(Error::AccountSelectorConstructionError)
+        })
     }
 }
 
@@ -363,8 +369,6 @@ impl SynergiaApi<AuthenticatedState> {
         Ok(resource)
     }
 
-    // fetch_synergia_endpoint isn't exposed because we don't want to let the user be able to
-    // choose a wrong type for the output on accident
     pub async fn fetch_users(&self) -> Result<Users> {
         Ok(self
             .fetch_synergia_endpoint::<UsersResponse>(AuthenticatedSynergiaEndpoints::Users)

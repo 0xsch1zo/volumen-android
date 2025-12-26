@@ -50,13 +50,23 @@ impl Middleware for ErrorStatusMiddleware {
     }
 }
 
-trait IsSameBaseExt {
+trait UrlCompareExt {
     fn is_same_base(&self, other: &Url) -> bool;
+
+    fn starts_with(&self, other: &Url) -> bool;
 }
 
-impl IsSameBaseExt for Url {
+impl UrlCompareExt for Url {
     fn is_same_base(&self, other: &Url) -> bool {
         self.has_host() && self.host() == other.host() && self.scheme() == other.scheme()
+    }
+
+    fn starts_with(&self, other: &Url) -> bool {
+        if !self.is_same_base(other) {
+            return false;
+        }
+
+        return self.path().starts_with(other.path());
     }
 }
 

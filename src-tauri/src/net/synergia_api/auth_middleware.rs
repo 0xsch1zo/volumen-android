@@ -1,4 +1,4 @@
-use std::{iter, sync::Arc};
+use std::iter;
 
 use cookie::Cookie;
 use itertools::Itertools;
@@ -11,61 +11,42 @@ use reqwest_middleware::{Middleware, Next};
 use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
 
-use crate::net::synergia_api::{
-    api::auth::{PortalAccessToken, SynergiaToken},
-    auth_manager::{AuthorizationManager, AuthorizationManagerError},
-    token_management::PickedToken,
-};
+use crate::net::synergia_api::auth_manager::{self, AuthorizationManager};
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("reqwest middleware error")]
     ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
-    #[error("account management error")]
-    AuthorizationManagerError(#[from] AuthorizationManagerError),
     #[error("failed to insert auth header")]
     AuthHeaderInsertionFailure(#[from] InvalidHeaderValue),
     #[error("failed to convert cookies to str")]
     CookieConvError(#[source] ToStrError),
     #[error("failed to parse cookies to attach them to the request")]
     CookieParsingError(#[source] cookie::ParseError),
+    #[error("failed to acquire synergia auth token")]
+    FailedTokenAcquistion(#[source] auth_manager::Error),
+    #[error("token refresh failure")]
+    TokenRefreshError(#[source] auth_manager::Error),
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct AuthorizationMiddleware {
-    authorization_manager: Arc<AuthorizationManager>,
+    auth_manager: AuthorizationManager,
 }
 
 impl AuthorizationMiddleware {
-    pub fn new(authorization_manager: Arc<AuthorizationManager>) -> Self {
-        Self {
-            authorization_manager,
-        }
+    pub fn new(auth_manager: AuthorizationManager) -> Self {
+        Self { auth_manager }
     }
 
-    async fn add_auth_token_on_managed(&self, req: &mut Request) -> Result<()> {
-        match self.authorization_manager.managed_token(req.url()).await? {
-            Some(PickedToken::PortalAccessToken(portal_token)) => {
-                self.add_portal_token(req, portal_token)
-            }
-            Some(PickedToken::SynergiaToken(synergia_token)) => {
-                self.add_synergia_token(req, synergia_token)
-            }
-            None => Ok(()),
-        }
-    }
-
-    fn add_portal_token(&self, req: &mut Request, portal_token: PortalAccessToken) -> Result<()> {
-        req.headers_mut().insert(
-            header::AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", portal_token.as_inner()))?,
-        );
-        Ok(())
-    }
-
-    fn add_synergia_token(&self, req: &mut Request, synergia_token: SynergiaToken) -> Result<()> {
-        let token_cookie = Cookie::new("oauth_token", synergia_token.as_inner());
+    async fn authenticate(&self, req: &mut Request) -> Result<()> {
+        let token = self
+            .auth_manager
+            .authenciation()
+            .await
+            .map_err(Error::FailedTokenAcquistion)?;
+        let token_cookie = Cookie::new("oauth_token", token.as_inner());
         let cookies = match req.headers().get(header::COOKIE) {
             Some(c) => Cookie::split_parse(c.to_str().map_err(|e| Error::CookieConvError(e))?)
                 .collect::<Result<Vec<_>, cookie::ParseError>>()
@@ -90,12 +71,13 @@ impl AuthorizationMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> Result<Response> {
-        if self.authorization_manager.is_managed(req.url()).await?
-            && res.status() == StatusCode::UNAUTHORIZED
-        {
+        if res.status() == StatusCode::UNAUTHORIZED {
             debug!("refreshing!!!");
-            self.authorization_manager.refresh().await?;
-            self.add_auth_token_on_managed(&mut req).await?;
+            self.auth_manager
+                .refresh()
+                .await
+                .map_err(Error::TokenRefreshError)?;
+            self.authenticate(&mut req).await?;
             Ok(next.run(req, extensions).await?)
         } else {
             Ok(res)
@@ -117,7 +99,7 @@ impl Middleware for AuthorizationMiddleware {
             return next.run(req, extensions).await;
         };
 
-        self.add_auth_token_on_managed(&mut req_clone)
+        self.authenticate(&mut req_clone)
             .await
             .map_err(|e| reqwest_middleware::Error::middleware(e))?;
 

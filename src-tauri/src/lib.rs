@@ -13,7 +13,6 @@ use crate::{
 mod cache;
 mod common;
 mod error;
-mod inverse_repositories;
 mod net;
 mod repositories;
 mod state;
