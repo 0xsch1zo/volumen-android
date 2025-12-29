@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{cell::LazyCell, collections::HashMap};
+use url::Url;
 
-use crate::repositories::account_selection as models;
+use crate::{net::synergia_api::MESSAGES_URL, repositories::account_selection as models};
 #[derive(Debug)]
 pub enum LoginAttrKinds {
     RedirectTo,
@@ -111,8 +112,14 @@ pub struct PortalTokenPair {
 pub struct SynergiaToken(String);
 
 impl SynergiaToken {
+    const NAME: &str = "oauth_token";
+
     pub fn as_inner(&self) -> &str {
         &self.0
+    }
+
+    pub fn into_cookie_string(self) -> String {
+        format!("{}={}", Self::NAME, self.0)
     }
 }
 
@@ -172,4 +179,22 @@ impl AuthCode {
 pub struct Tokens {
     pub portal_token_pair: PortalTokenPair,
     pub synergia_tokens: SynergiaTokens,
+}
+
+#[derive(Debug)]
+pub struct PowerCookie(cookie_store::Cookie<'static>);
+
+impl PowerCookie {
+    pub const NAME: &'static str = "DZIENNIKSID";
+    pub const DOMAIN: &'static str = "wiadomosci.librus.pl";
+    pub const PATH: &'static str = "/";
+    pub const URL: LazyCell<Url> = MESSAGES_URL;
+
+    pub fn new(cookie: cookie_store::Cookie<'static>) -> Self {
+        Self(cookie)
+    }
+
+    pub fn into_inner(self) -> cookie_store::Cookie<'static> {
+        self.0
+    }
 }

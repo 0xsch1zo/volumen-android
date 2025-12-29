@@ -567,6 +567,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "cookie_store"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fc4bff745c9b4c7fb1e97b25d13153da2bc7796260141df62378998d070207f"
+dependencies = [
+ "cookie",
+ "document-features",
+ "idna",
+ "log",
+ "publicsuffix",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "time",
+ "url",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3391,7 +3409,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "cookie",
- "cookie_store",
+ "cookie_store 0.21.1",
  "futures-core",
  "futures-util",
  "http",
@@ -3439,6 +3457,18 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "tower-service",
+]
+
+[[package]]
+name = "reqwest_cookie_store"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e75bc88d954b228850d19e3685cedb38c030a17da34aa01c307f95d6e33de34"
+dependencies = [
+ "bytes",
+ "cookie_store 0.22.0",
+ "reqwest",
+ "url",
 ]
 
 [[package]]
@@ -4918,6 +4948,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "cookie",
+ "cookie_store 0.22.0",
  "delegate",
  "derive_more 2.1.1",
  "env_logger",
@@ -4927,6 +4958,7 @@ dependencies = [
  "moka",
  "reqwest",
  "reqwest-middleware",
+ "reqwest_cookie_store",
  "scraper",
  "serde",
  "serde_json",

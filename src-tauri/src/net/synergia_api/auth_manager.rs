@@ -1,27 +1,38 @@
+use std::sync::Arc;
+
+use log::debug;
+use reqwest::header::{self, ToStrError};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use tauri::http::HeaderValue;
 use thiserror::Error;
 use tokio::sync::RwLock;
 
 use crate::{
-    net::synergia_api::{
-        api::auth::{SynergiaToken, SynergiaUserId, Tokens},
-        token_management::{TokensApi, TokensApiError},
+    net::{
+        self,
+        synergia_api::{
+            api::auth::{PowerCookie, SynergiaToken, SynergiaUserId, Tokens},
+            token_management::{TokensApi, TokensApiError},
+            AuthenticatedSynergiaEndpoints,
+        },
     },
     sync::SingleParallelFlight,
 };
 
 #[derive(Error, Clone, Debug)]
-pub enum Error {
+pub enum ManagerError {
     #[error("synergia token not found for id: {0:?}")]
     SynergiaTokenNotFound(SynergiaUserId),
     #[error("token refresh error")]
     TokenRefreshError(#[source] TokensApiError),
 }
 
+#[derive(Debug)]
 pub struct AuthorizationManager {
     synergia_user_id: SynergiaUserId,
     tokens: RwLock<Option<Tokens>>,
     tokens_api: TokensApi,
-    refresh_worker: SingleParallelFlight<Result<(), Error>>,
+    refresh_worker: SingleParallelFlight<Result<(), ManagerError>>,
 }
 
 impl AuthorizationManager {
@@ -34,7 +45,7 @@ impl AuthorizationManager {
         }
     }
 
-    pub async fn authenciation(&self) -> Result<SynergiaToken, Error> {
+    pub async fn authenciation(&self) -> Result<SynergiaToken, ManagerError> {
         let tokens = self.tokens.read().await;
         Ok(tokens
             .as_ref()
@@ -42,11 +53,11 @@ impl AuthorizationManager {
             .synergia_tokens
             .inner()
             .get(&self.synergia_user_id)
-            .ok_or(Error::SynergiaTokenNotFound(self.synergia_user_id))?
+            .ok_or(ManagerError::SynergiaTokenNotFound(self.synergia_user_id))?
             .to_owned())
     }
 
-    pub async fn refresh(&self) -> Result<(), Error> {
+    pub async fn refresh(&self) -> Result<(), ManagerError> {
         self.refresh_worker
             .work(async || {
                 let mut tokens_guard = self.tokens.write().await;
@@ -55,7 +66,7 @@ impl AuthorizationManager {
                     self.tokens_api
                         .refresh(tokens)
                         .await
-                        .map_err(Error::TokenRefreshError)?,
+                        .map_err(ManagerError::TokenRefreshError)?,
                 );
                 Ok(())
             })
@@ -65,5 +76,86 @@ impl AuthorizationManager {
 
     pub fn decay(self) -> (Tokens, TokensApi) {
         (self.tokens.into_inner().unwrap(), self.tokens_api)
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum MessagesManagerError {
+    #[error("failed to initialize network client of messages auth manager")]
+    ClientInitFailed(#[source] reqwest::Error),
+    #[error("failed to get authentication for power cookie fetch")]
+    PowerCookieRequestAuthentictationFailure(#[source] ManagerError),
+    #[error("failed to get power cookies")]
+    PowerCookieAcquisitionFailure(#[source] reqwest_middleware::Error),
+    #[error("power cookie not found in response headers of /Me")]
+    PowerCookieNotFound,
+    #[error("failed to convert cookie header to &str, while acquiring the power cookie")]
+    CookieHeaderToStrError(#[source] ToStrError),
+    #[error("cookie parsing error, while acquiring power cookie")]
+    CookieParseError(#[source] cookie::ParseError),
+    #[error("failed to parse power cookie from raw cookie")]
+    PowerCookieParseError(#[source] cookie_store::CookieError),
+}
+
+#[derive(Debug)]
+pub struct MessagesAuthManager {
+    auth_manager: Arc<AuthorizationManager>,
+    client: ClientWithMiddleware,
+}
+
+impl MessagesAuthManager {
+    pub fn try_new(auth_manager: Arc<AuthorizationManager>) -> Result<Self, MessagesManagerError> {
+        let client = ClientBuilder::new(
+            net::default_client_options()
+                .build()
+                .map_err(MessagesManagerError::ClientInitFailed)?,
+        )
+        .build();
+        Ok(Self {
+            auth_manager,
+            client,
+        })
+    }
+
+    // the goddamn cookie api is complete and utter dogshit
+    pub async fn fetch_power_cookie(&self) -> Result<PowerCookie, MessagesManagerError> {
+        let authentication = self
+            .auth_manager
+            .authenciation()
+            .await
+            .map(SynergiaToken::into_cookie_string)
+            .map_err(MessagesManagerError::PowerCookieRequestAuthentictationFailure)?;
+
+        let response = self
+            .client
+            .get(AuthenticatedSynergiaEndpoints::Me.url())
+            .header(header::COOKIE, &authentication)
+            .send()
+            .await
+            .map_err(MessagesManagerError::PowerCookieAcquisitionFailure)?;
+
+        let cookie_headers = response
+            .headers()
+            .get_all(header::SET_COOKIE)
+            .into_iter()
+            .map(HeaderValue::to_str)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(MessagesManagerError::CookieHeaderToStrError)?;
+
+        let cookies = cookie_headers
+            .into_iter()
+            .map(cookie::Cookie::parse_encoded)
+            .map(|r| r.map_err(MessagesManagerError::CookieParseError))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        debug!("parsed cookies");
+        cookies
+            .into_iter()
+            .find(|c| PowerCookie::NAME == c.name())
+            .map(|c| cookie_store::Cookie::try_from_raw_cookie(&c, &PowerCookie::URL))
+            .ok_or(MessagesManagerError::PowerCookieNotFound)?
+            .map(cookie_store::Cookie::into_owned)
+            .map(PowerCookie::new)
+            .map_err(MessagesManagerError::PowerCookieParseError)
     }
 }

@@ -77,16 +77,9 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .into_app_result()
         .log_on_err()?;
 
-    let grades = state
-        .main_repository
-        .grades()
-        .await
-        .into_app_result()
-        .log_on_err()?;
-
     let details = state
         .main_repository
-        .grade_details(&grades.first().unwrap())
+        .messages_recieved()
         .await
         .into_app_result()
         .log_on_err()?;

@@ -1,20 +1,21 @@
-use std::{borrow::Cow, cell::LazyCell};
+use std::{borrow::Cow, cell::LazyCell, sync::Arc};
 
+use cookie_store::CookieStore;
 use itertools::Itertools;
 use log::{debug, warn};
 use reqwest::{
     header::{InvalidHeaderValue, ToStrError},
-    redirect::{Action, Attempt, Policy},
+    redirect::Policy,
     Url,
 };
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_cookie_store::CookieStoreRwLock;
 use scraper::{Html, Selector};
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 use crate::{
     common::TakeExactlyExt,
-    error,
+    error::{self, IntoStatefulErrorExt},
     net::{
         self,
         synergia_api::{
@@ -22,14 +23,17 @@ use crate::{
             api::{
                 auth::{AuthCode, LoginAttrKinds, LoginAttrs, LoginRequest},
                 grades::{CategoriesResponse, CommentResponse, GradesResponse},
+                //messages::Message,
                 subjects::SubjectsResponse,
                 users::UsersResponse,
             },
             auth_manager::AuthorizationManager,
-            auth_middleware::AuthorizationMiddleware,
+            clients::{
+                MainAuthenticatedClient,
+                /*MessagesAuthenticatedClient,*/ UnauthenticatedClient,
+            },
             token_management::{TokensApi, TokensApiError},
         },
-        ErrorStatusMiddleware,
     },
     repositories::{
         grades::{Categories, Comment, CommentId, ShallowGrades},
@@ -42,13 +46,18 @@ use crate::{
 pub mod account_selector;
 mod api;
 mod auth_manager;
-mod auth_middleware;
+mod clients;
 pub mod token_management;
+
+pub use api::messages::Message; // TODO: remove this after creating a repository for messages
 
 const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.librus.pl").unwrap());
 
 const SYNERGIA_URL: LazyCell<Url> =
     LazyCell::new(|| Url::parse("https://synergia.librus.pl").unwrap());
+
+const MESSAGES_URL: LazyCell<Url> =
+    LazyCell::new(|| Url::parse("https://wiadomosci.librus.pl").unwrap());
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -72,66 +81,86 @@ pub enum Error {
     TokenFetchError(#[source] TokensApiError),
     #[error("account selector construction error")]
     AccountSelectorConstructionError(#[source] AccountSelectorError),
-    #[error("auth middleware error")]
-    AuthMiddlewareError(#[from] auth_middleware::Error),
+    #[error("unauthenticated client construction failure")]
+    UnauthenticatedClientConstructionError(#[source] clients::ClientConstructionError),
+    #[error("main authenticated client construction failure")]
+    MainAuthenticatedClientConstructionError(#[source] clients::ClientConstructionError),
+    #[error("main authenticated client construction failure")]
+    MessagesAuthenticatedClientConstructionError(#[source] clients::ClientConstructionError),
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 type StatefulError<S, E = Error> = error::StatefulError<S, E>;
+
 pub trait ApiState {}
 
 #[derive(Debug)]
 pub struct UnauthenticatedState {
-    client: ClientWithMiddleware,
+    client: UnauthenticatedClient,
 }
 
 impl UnauthenticatedState {
     fn try_new() -> Result<Self> {
         Ok(Self {
-            client: Self::build_client()?,
+            client: UnauthenticatedClient::try_new(
+                SynergiaApi::<UnauthenticatedState>::redirect_policy(),
+            )
+            .map_err(Error::UnauthenticatedClientConstructionError)?,
         })
     }
+}
 
-    fn build_client() -> Result<ClientWithMiddleware> {
-        let reqwest_client = net::default_client_options()
-            .redirect(Policy::custom(
-                SynergiaApi::<UnauthenticatedState>::redirect_policy,
-            ))
-            .cookie_store(true)
-            .build()?;
+struct UnauthenticatedRedirectPolicy(Policy);
 
-        Ok(ClientBuilder::new(reqwest_client)
-            .with(ErrorStatusMiddleware)
-            .build())
+impl UnauthenticatedRedirectPolicy {
+    fn into_inner(self) -> Policy {
+        self.0
     }
 }
 
 #[derive(Debug)]
 pub struct AuthenticatedState {
-    client: ClientWithMiddleware,
+    main_client: MainAuthenticatedClient,
+    //messages_client: MessagesAuthenticatedClient, // we use a different client because auth works
+    //                                              // differently
 }
 
 impl AuthenticatedState {
     fn try_from_auth_manager(
         authorization_manager: AuthorizationManager,
     ) -> Result<Self, StatefulError<AuthorizationManager>> {
-        Ok(Self {
-            client: Self::build_client(authorization_manager)?,
-        })
-    }
-
-    fn build_client(
-        authorization_manager: AuthorizationManager,
-    ) -> Result<ClientWithMiddleware, StatefulError<AuthorizationManager>> {
-        let reqwest_client = stateful_result! { authorization_manager =>
-            net::default_client_options().cookie_store(true).build()
+        let cookie_store = Arc::new(CookieStoreRwLock::new(CookieStore::new()));
+        let authorization_manager = Arc::new(authorization_manager);
+        let main_client = MainAuthenticatedClient::try_new(
+            Arc::clone(&cookie_store),
+            Arc::clone(&authorization_manager),
+        )
+        .map_err(Error::MainAuthenticatedClientConstructionError);
+        let main_client = match main_client {
+            Ok(c) => c,
+            Err(e) => {
+                // auth_manager should be dropped alredy
+                return Err(e.into_stateful_err(Arc::into_inner(authorization_manager).unwrap()));
+            }
         };
 
-        Ok(ClientBuilder::new(reqwest_client)
-            .with(ErrorStatusMiddleware)
-            .with(AuthorizationMiddleware::new(authorization_manager))
-            .build())
+        /*let messages_client =
+            MessagesAuthenticatedClient::try_new(cookie_store, Arc::clone(&authorization_manager))
+                .map_err(Error::MessagesAuthenticatedClientConstructionError);
+        let messages_client = match messages_client {
+            Ok(c) => c,
+            Err(e) => {
+                drop(main_client);
+                // auth_manager should be dropped alredy
+                return Err(e.into_stateful_err(Arc::into_inner(authorization_manager).unwrap()));
+            }
+        };*/
+
+        Ok(Self {
+            main_client,
+            //messages_client,
+        })
     }
 }
 
@@ -150,11 +179,13 @@ impl SynergiaApi<UnauthenticatedState> {
         })
     }
 
-    fn redirect_policy(attempt: Attempt) -> Action {
-        match Self::extract_auth_code(attempt.url()) {
-            Some(_) => attempt.stop(),
-            None => attempt.follow(),
-        }
+    fn redirect_policy() -> UnauthenticatedRedirectPolicy {
+        UnauthenticatedRedirectPolicy(Policy::custom(|attempt| {
+            match Self::extract_auth_code(attempt.url()) {
+                Some(_) => attempt.stop(),
+                None => attempt.follow(),
+            }
+        }))
     }
 
     fn extract_auth_code(url: &Url) -> Option<String> {
@@ -214,6 +245,7 @@ impl SynergiaApi<UnauthenticatedState> {
         let html = self
             .state
             .client
+            .as_inner()
             .get(PORTAL_URL.join(ATTR_ENDPOINT).unwrap())
             .send()
             .await?
@@ -227,6 +259,7 @@ impl SynergiaApi<UnauthenticatedState> {
         let auth_code_response = self
             .state
             .client
+            .as_inner()
             .post(PORTAL_URL.join(LOGIN_ENDPOINT).unwrap())
             .form(req)
             .send()
@@ -279,6 +312,7 @@ impl SynergiaApi<UnauthenticatedState> {
 
 #[derive(Debug)]
 enum AuthenticatedSynergiaEndpoints {
+    Me,
     Users,
     Subjects,
     Grades(GradesEndpoints),
@@ -288,6 +322,7 @@ enum AuthenticatedSynergiaEndpoints {
 impl AuthenticatedSynergiaEndpoints {
     fn url(&self) -> Url {
         match self {
+            AuthenticatedSynergiaEndpoints::Me => SYNERGIA_URL.join("/gateway/api/2.0/Me").unwrap(),
             AuthenticatedSynergiaEndpoints::Users => {
                 SYNERGIA_URL.join("/gateway/api/2.0/Users").unwrap()
             }
@@ -328,8 +363,6 @@ enum MessagesEndpoints {
 
 impl MessagesEndpoints {
     fn url(&self) -> Url {
-        const MESSAGES_URL: LazyCell<Url> =
-            LazyCell::new(|| Url::parse("https://wiadomosci.librus.pl").unwrap());
         let endoint = match self {
             MessagesEndpoints::Recieved { page, limit } => {
                 &format!("/api/inbox/messages?page={page}&limit={limit}")
@@ -359,7 +392,8 @@ impl SynergiaApi<AuthenticatedState> {
         debug!("fetching {endpoint:?}");
         let resource = self
             .state
-            .client
+            .main_client
+            .as_inner()
             .get(endpoint.url())
             .send()
             .await?
@@ -385,6 +419,10 @@ impl SynergiaApi<AuthenticatedState> {
 
     pub fn grades(&self) -> GradesManager {
         GradesManager::new(&self)
+    }
+
+    pub fn messages(&self) -> MessagesManager {
+        MessagesManager::new(&self)
     }
 }
 
@@ -437,5 +475,38 @@ impl<'a> MessagesManager<'a> {
         Self { synergia_api }
     }
 
-    //pub fn fetch_recieved()
+    /*pub async fn feth_message_endpoint<T: DeserializeOwned>(&self endpoint: AuthenticatedSynergiaEndpoints) -> Result<T> {
+    w        debug!("fetching {endpoint:?}");
+            let resource = self
+                .synergia_api
+                .state
+                .m
+                .as_inner()
+                .get(endpoint.url())
+                .send()
+                .await?
+                .json::<T>()
+                .await?;
+            debug!("fetched {endpoint:?} succesfully");
+            Ok(resource)
+        }
+        }*/
+
+    pub async fn fetch_recieved(&self) -> Result<Vec<Message>> {
+        Ok(self
+            .synergia_api
+            .fetch_synergia_endpoint::<Vec<Message>>(AuthenticatedSynergiaEndpoints::Messages(
+                MessagesEndpoints::Recieved { page: 1, limit: 10 },
+            ))
+            .await?)
+    }
+
+    pub async fn fetch_sent(&self) -> Result<Vec<Message>> {
+        Ok(self
+            .synergia_api
+            .fetch_synergia_endpoint::<Vec<Message>>(AuthenticatedSynergiaEndpoints::Messages(
+                MessagesEndpoints::Sent { page: 1, limit: 10 },
+            ))
+            .await?)
+    }
 }

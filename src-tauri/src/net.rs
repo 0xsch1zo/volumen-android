@@ -1,12 +1,18 @@
-use reqwest::{Client, ClientBuilder, Request, Response};
+use std::iter;
+
+use cookie::{self, Cookie};
+use itertools::Itertools;
+use reqwest::{
+    header::{self, InvalidHeaderValue, ToStrError},
+    Client, ClientBuilder, Request, Response,
+};
 use reqwest_middleware::{Middleware, Next};
-use tauri::http::Extensions;
+use tauri::http::{Extensions, HeaderMap, HeaderValue};
 use thiserror::Error;
 
 pub mod synergia_api;
 
 pub use synergia_api::{Error as SynergiaApiError, SynergiaApi};
-use url::Url;
 
 #[derive(Error, Debug)]
 pub enum ResponseError {
@@ -50,7 +56,7 @@ impl Middleware for ErrorStatusMiddleware {
     }
 }
 
-trait UrlCompareExt {
+/*trait UrlCompareExt {
     fn is_same_base(&self, other: &Url) -> bool;
 
     fn starts_with(&self, other: &Url) -> bool;
@@ -68,11 +74,75 @@ impl UrlCompareExt for Url {
 
         return self.path().starts_with(other.path());
     }
-}
+}*/
 
 fn default_client_options() -> ClientBuilder {
     const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
     Client::builder()
         .connection_verbose(crate::is_debug())
         .user_agent(USER_AGENT)
+}
+
+#[derive(Error, Debug)]
+pub enum RequestCookieExtError {
+    #[error("failed to convert cookie header to &str")]
+    CookieHeaderToStrError(#[source] ToStrError),
+    #[error("failed parse to parse cookies from the header")]
+    CookieParseError(#[source] cookie::ParseError),
+    #[error("failed to insert new cookie header")]
+    CookieHeaderInsertionError(#[source] InvalidHeaderValue),
+}
+
+// maybe expand to a new type if needed
+trait RequestCookieExt {
+    fn append_cookie(&mut self, cookie: Cookie) -> Result<(), RequestCookieExtError>;
+
+    fn contains_cookie(&self, cookie_name: &str) -> Result<bool, RequestCookieExtError>;
+}
+
+impl RequestCookieExt for Request {
+    fn append_cookie(&mut self, cookie: Cookie) -> Result<(), RequestCookieExtError> {
+        let cookies = match self.headers().get(header::COOKIE) {
+            Some(c) => Cookie::split_parse_encoded(
+                c.to_str()
+                    .map_err(RequestCookieExtError::CookieHeaderToStrError)?,
+            )
+            .collect::<Result<Vec<_>, cookie::ParseError>>()
+            .map_err(RequestCookieExtError::CookieParseError)?
+            .into_iter()
+            .chain(iter::once(cookie))
+            .map(|c| c.encoded().stripped().to_string())
+            .join("; "),
+            None => cookie.encoded().stripped().to_string(),
+        };
+
+        self.headers_mut().insert(
+            header::COOKIE,
+            HeaderValue::from_str(&cookies)
+                .map_err(RequestCookieExtError::CookieHeaderInsertionError)?,
+        );
+
+        Ok(())
+    }
+
+    fn contains_cookie(&self, cookie_name: &str) -> Result<bool, RequestCookieExtError> {
+        let cookie_headers = self
+            .headers()
+            .get_all(header::COOKIE)
+            .into_iter()
+            .map(HeaderValue::to_str)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(RequestCookieExtError::CookieHeaderToStrError)?;
+
+        let cookies = cookie_headers
+            .into_iter()
+            .map(Cookie::split_parse_encoded)
+            .map(|cookies| cookies.collect::<Result<Vec<_>, cookie::ParseError>>())
+            .collect::<Result<Vec<_>, cookie::ParseError>>()
+            .map_err(RequestCookieExtError::CookieParseError)?
+            .into_iter()
+            .flatten();
+
+        Ok(cookies.into_iter().any(|c| c.name() == cookie_name))
+    }
 }

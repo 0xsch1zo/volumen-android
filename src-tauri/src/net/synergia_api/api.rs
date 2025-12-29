@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod auth;
 pub mod grades;
+pub mod messages;
 pub mod subjects;
 pub mod users;
 
