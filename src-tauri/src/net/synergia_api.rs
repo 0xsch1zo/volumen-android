@@ -130,13 +130,9 @@ impl AuthenticatedState {
     fn try_from_auth_manager(
         authorization_manager: AuthorizationManager,
     ) -> Result<Self, StatefulError<AuthorizationManager>> {
-        let cookie_store = Arc::new(CookieStoreRwLock::new(CookieStore::new()));
         let authorization_manager = Arc::new(authorization_manager);
-        let main_client = MainAuthenticatedClient::try_new(
-            Arc::clone(&cookie_store),
-            Arc::clone(&authorization_manager),
-        )
-        .map_err(Error::MainAuthenticatedClientConstructionError);
+        let main_client = MainAuthenticatedClient::try_new(Arc::clone(&authorization_manager))
+            .map_err(Error::MainAuthenticatedClientConstructionError);
         let main_client = match main_client {
             Ok(c) => c,
             Err(e) => {
@@ -357,21 +353,23 @@ impl GradesEndpoints {
 
 #[derive(Debug)]
 enum MessagesEndpoints {
+    Authorization,
     Recieved { page: usize, limit: usize },
     Sent { page: usize, limit: usize },
 }
 
 impl MessagesEndpoints {
     fn url(&self) -> Url {
-        let endoint = match self {
+        let endpoint = match self {
             MessagesEndpoints::Recieved { page, limit } => {
                 &format!("/api/inbox/messages?page={page}&limit={limit}")
             }
             MessagesEndpoints::Sent { page, limit } => {
                 &format!("/api/outbox/messages?page={page}&limit={limit}")
             }
+            MessagesEndpoints::Authorization => return SYNERGIA_URL.join("/wiadomosci3").unwrap(),
         };
-        MESSAGES_URL.join(endoint).unwrap()
+        MESSAGES_URL.join(endpoint).unwrap()
     }
 }
 

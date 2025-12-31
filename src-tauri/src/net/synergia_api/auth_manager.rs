@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use log::debug;
-use reqwest::header::{self, ToStrError};
+use reqwest::{
+    header::{self, ToStrError},
+    redirect::Policy,
+};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use tauri::http::HeaderValue;
 use thiserror::Error;
@@ -13,7 +16,7 @@ use crate::{
         synergia_api::{
             api::auth::{PowerCookie, SynergiaToken, SynergiaUserId, Tokens},
             token_management::{TokensApi, TokensApiError},
-            AuthenticatedSynergiaEndpoints,
+            AuthenticatedSynergiaEndpoints, MessagesEndpoints,
         },
     },
     sync::SingleParallelFlight,
@@ -97,9 +100,22 @@ pub enum MessagesManagerError {
     PowerCookieParseError(#[source] cookie_store::CookieError),
 }
 
+#[derive(Debug, Clone, Copy)]
+enum MessagesModuleAuthorizationState {
+    Authorized,
+    Unauthorized,
+}
+
+#[derive(Debug)]
+pub enum MessagesModuleAuthorizationResponse {
+    AlreadyAuthorized,
+    Authorization(PowerCookie),
+}
+
 #[derive(Debug)]
 pub struct MessagesAuthManager {
     auth_manager: Arc<AuthorizationManager>,
+    authorization_state: RwLock<MessagesModuleAuthorizationState>,
     client: ClientWithMiddleware,
 }
 
@@ -107,18 +123,78 @@ impl MessagesAuthManager {
     pub fn try_new(auth_manager: Arc<AuthorizationManager>) -> Result<Self, MessagesManagerError> {
         let client = ClientBuilder::new(
             net::default_client_options()
+                .connection_verbose(true)
+                .redirect(Self::redirect_policy())
                 .build()
                 .map_err(MessagesManagerError::ClientInitFailed)?,
         )
         .build();
+        let authorization_state = RwLock::new(MessagesModuleAuthorizationState::Unauthorized);
         Ok(Self {
+            authorization_state,
             auth_manager,
             client,
         })
     }
 
+    pub async fn request_authoriztaion(
+        &self,
+        power_cookie: Option<PowerCookie>,
+    ) -> Result<MessagesModuleAuthorizationResponse, MessagesManagerError> {
+        let state = *self.authorization_state.read().await;
+        match state {
+            MessagesModuleAuthorizationState::Authorized => {
+                Ok(MessagesModuleAuthorizationResponse::AlreadyAuthorized)
+            }
+            MessagesModuleAuthorizationState::Unauthorized => {
+                let power_cookie = MessagesModuleAuthorizationResponse::Authorization(
+                    self.authorize(power_cookie).await?,
+                );
+                *self.authorization_state.write().await =
+                    MessagesModuleAuthorizationState::Authorized;
+                Ok(power_cookie)
+            }
+        }
+    }
+
+    fn redirect_policy() -> Policy {
+        Policy::custom(|attempt| {
+            debug!("following redirect: {}", attempt.url());
+            attempt.follow()
+        })
+    }
+
     // the goddamn cookie api is complete and utter dogshit
-    pub async fn fetch_power_cookie(&self) -> Result<PowerCookie, MessagesManagerError> {
+    async fn authorize(
+        &self,
+        power_cookie: Option<PowerCookie>,
+    ) -> Result<PowerCookie, MessagesManagerError> {
+        let power_cookie = match power_cookie {
+            Some(c) => c,
+            None => self.fetch_power_cookie().await?,
+        };
+
+        let authentication = self
+            .auth_manager
+            .authenciation()
+            .await
+            .map(SynergiaToken::into_cookie_string)
+            .map_err(MessagesManagerError::PowerCookieRequestAuthentictationFailure)?;
+
+        self.client
+            .get(AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::Authorization).url())
+            .header(
+                header::COOKIE,
+                &format!("{authentication}; {}", power_cookie.to_cookie_string()),
+            )
+            .send()
+            .await
+            .map_err(MessagesManagerError::PowerCookieAcquisitionFailure)?;
+
+        Ok(power_cookie)
+    }
+
+    async fn fetch_power_cookie(&self) -> Result<PowerCookie, MessagesManagerError> {
         let authentication = self
             .auth_manager
             .authenciation()

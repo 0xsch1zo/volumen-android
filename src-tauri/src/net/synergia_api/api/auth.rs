@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{cell::LazyCell, collections::HashMap};
-use url::Url;
+use url::{form_urlencoded, Url};
 
 use crate::{net::synergia_api::MESSAGES_URL, repositories::account_selection as models};
 #[derive(Debug)]
@@ -119,7 +119,8 @@ impl SynergiaToken {
     }
 
     pub fn into_cookie_string(self) -> String {
-        format!("{}={}", Self::NAME, self.0)
+        let value = form_urlencoded::byte_serialize(self.0.as_bytes()).collect::<String>();
+        format!("{}={}", Self::NAME, value)
     }
 }
 
@@ -196,5 +197,9 @@ impl PowerCookie {
 
     pub fn into_inner(self) -> cookie_store::Cookie<'static> {
         self.0
+    }
+
+    pub fn to_cookie_string(&self) -> String {
+        self.0.encoded().stripped().to_string()
     }
 }

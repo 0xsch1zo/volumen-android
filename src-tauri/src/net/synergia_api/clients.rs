@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use cookie::Cookie;
+use cookie_store::CookieStore;
 use log::debug;
 use reqwest::{Request, Response, StatusCode};
-use reqwest_cookie_store::CookieStoreRwLock;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
-use tauri::http::Extensions;
+use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
 
 use crate::net::{
@@ -59,20 +59,20 @@ impl AuthorizationMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> Result<Response, MiddlewareError> {
-        if res.status() == StatusCode::UNAUTHORIZED {
-            debug!("refreshing!!!");
-            self.auth_manager
-                .refresh()
-                .await
-                .map_err(MiddlewareError::TokenRefreshError)?;
-            self.authenticate(&mut req).await?;
-            Ok(next
-                .run(req, extensions)
-                .await
-                .map_err(MiddlewareError::MiddlewareChainFailure)?)
-        } else {
+        //if res.status() == StatusCode::UNAUTHORIZED {
+        debug!("refreshing!!!");
+        self.auth_manager
+            .refresh()
+            .await
+            .map_err(MiddlewareError::TokenRefreshError)?;
+        self.authenticate(&mut req).await?;
+        Ok(next
+            .run(req, extensions)
+            .await
+            .map_err(MiddlewareError::MiddlewareChainFailure)?)
+        /*} else {
             Ok(res)
-        }
+        }*/
     }
 }
 
@@ -107,10 +107,12 @@ impl Middleware for AuthorizationMiddleware {
 pub enum MessagesMiddlewareError {
     #[error("failed to construct MessagesAuthManager")]
     MessagesAuthManagerConstructionError(#[source] MessagesManagerError),
+    #[error("failed to authorize access to the messages module")]
+    AuthorizatioError(#[source] MessagesManagerError),
     #[error("failed to fetch power cookie")]
     PowerCookieFetchError(#[source] MessagesManagerError),
-    #[error("failed to request authentication from MessagesAuthManager")]
-    AuthenticationRequestError(#[source] MessagesManagerError),
+    #[error("failed to insert power cookie")]
+    PowerCookieInsertError(#[source] cookie_store::CookieError),
     #[error("failed to check if request contains power cookie")]
     RequestAuthCheckError(#[source] RequestCookieExtError),
     #[error("failed to append power cookie to request")]
@@ -136,13 +138,30 @@ impl MessagesAuthorizationMiddleware {
     }
 
     async fn authenticate(&self, req: &mut Request) -> Result<(), MessagesMiddlewareError> {
+        debug!("requesting authorization");
         let power_cookie = self
             .cookie_store
             .read()
             .unwrap()
             .get(PowerCookie::DOMAIN, PowerCookie::PATH, PowerCookie::NAME)
             .map(ToOwned::to_owned)
+            .map(cookie_store::Cookie::into_owned)
+            .map(PowerCookie::new);
+
+        let resp = self
+            .messages_auth_manager
+            .request_authoriztaion(power_cookie)
+            .await
+            .map_err(MessagesMiddlewareError::AuthorizatioError)?;
+        debug!("authorization response: {resp:?}");
+        /*let power_cookie = self
+            .cookie_store
+            .read()
+            .unwrap()
+            .get(PowerCookie::DOMAIN, PowerCookie::PATH, PowerCookie::NAME)
+            .map(ToOwned::to_owned)
             .map(cookie_store::Cookie::into_owned);
+
         let power_cookie_is_attached = req
             .contains_cookie(PowerCookie::NAME)
             .map_err(MessagesMiddlewareError::RequestAuthCheckError)?;
@@ -162,12 +181,15 @@ impl MessagesAuthorizationMiddleware {
                 self.cookie_store
                     .write()
                     .unwrap()
-                    .insert(power_cookie.clone(), &PowerCookie::URL);
+                    .insert(power_cookie.clone(), &PowerCookie::URL)
+                    .map_err(MessagesMiddlewareError::PowerCookieInsertError)?;
+                debug!("{:?}", self.cookie_store.read().unwrap());
+
                 debug!("inserting cookie");
                 req.append_cookie(power_cookie.into())
                     .map_err(MessagesMiddlewareError::PowerCookieAppendageError)?;
             }
-        }
+        }*/
 
         Ok(())
     }
@@ -230,9 +252,9 @@ pub struct MainAuthenticatedClient(ClientWithMiddleware);
 
 impl MainAuthenticatedClient {
     pub fn try_new(
-        cookie_store: Arc<CookieStoreRwLock>,
         authorization_manager: Arc<AuthorizationManager>,
     ) -> Result<Self, ClientConstructionError> {
+        let cookie_store = Arc::new(CookieStoreRwLock::new());
         let client = net::default_client_options()
             .cookie_provider(Arc::clone(&cookie_store))
             .build()?;
@@ -243,16 +265,78 @@ impl MainAuthenticatedClient {
                 .with(AuthorizationMiddleware::new(Arc::clone(
                     &authorization_manager,
                 )))
-                .with(
+                /*.with(
                     MessagesAuthorizationMiddleware::try_new(cookie_store, authorization_manager)
                         .map_err(ClientConstructionError::MessagesMiddlewareConstructionError)?,
-                )
+                )*/
                 .build(),
         ))
     }
 
     pub fn as_inner(&self) -> &ClientWithMiddleware {
         &self.0
+    }
+}
+
+use bytes::Bytes;
+struct CookieStoreRwLock(RwLock<CookieStore>);
+
+impl CookieStoreRwLock {
+    fn new() -> Self {
+        Self(RwLock::new(CookieStore::new()))
+    }
+
+    fn read(
+        &self,
+    ) -> Result<RwLockReadGuard<'_, CookieStore>, PoisonError<RwLockReadGuard<'_, CookieStore>>>
+    {
+        self.0.read()
+    }
+
+    fn write(
+        &self,
+    ) -> Result<RwLockWriteGuard<'_, CookieStore>, PoisonError<RwLockWriteGuard<'_, CookieStore>>>
+    {
+        self.0.write()
+    }
+}
+
+impl reqwest::cookie::CookieStore for CookieStoreRwLock {
+    fn cookies(&self, url: &url::Url) -> Option<tauri::http::HeaderValue> {
+        debug!("queried for cookies");
+        let s = self
+            .0
+            .read()
+            .unwrap()
+            .get_request_values(url)
+            .map(|(name, value)| format!("{}={}", name, value))
+            .collect::<Vec<_>>()
+            .join("; ");
+
+        if s.is_empty() {
+            return None;
+        }
+
+        HeaderValue::from_maybe_shared(Bytes::from(s)).ok()
+    }
+
+    fn set_cookies(
+        &self,
+        cookie_headers: &mut dyn Iterator<Item = &tauri::http::HeaderValue>,
+        url: &url::Url,
+    ) {
+        debug!("should append cookies");
+        let cookies = cookie_headers.filter_map(|val| {
+            debug!("to be appended: {val:?}");
+            std::str::from_utf8(val.as_bytes())
+                .map_err(reqwest_cookie_store::RawCookieParseError::from)
+                .and_then(cookie::Cookie::parse)
+                .inspect_err(|e| debug!("cookie parsing error occuredd: {e:?}"))
+                .map(|c| c.into_owned())
+                .ok()
+        });
+        self.0.write().unwrap().store_response_cookies(cookies, url);
+        debug!("cookies should be appended")
     }
 }
 
@@ -279,4 +363,4 @@ impl MessagesAuthenticatedClient {
     pub fn as_inner(&self) -> &ClientWithMiddleware {
         &self.0
     }
-}*/
+} */

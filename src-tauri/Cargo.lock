@@ -4947,6 +4947,7 @@ name = "volumen-android"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bytes",
  "cookie",
  "cookie_store 0.22.0",
  "delegate",
