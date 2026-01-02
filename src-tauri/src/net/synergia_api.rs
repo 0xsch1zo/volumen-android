@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::LazyCell, sync::Arc};
+use std::{borrow::Cow, cell::LazyCell, sync::Arc, time::Duration};
 
 use cookie_store::CookieStore;
 use itertools::Itertools;
@@ -21,7 +21,11 @@ use crate::{
         synergia_api::{
             account_selector::{AccountSelector, AccountSelectorError},
             api::{
-                auth::{AuthCode, LoginAttrKinds, LoginAttrs, LoginRequest},
+                auth::{
+                    AuthCode, AuthorizationRequest, CaptchaRequest, CaptchaResponse,
+                    LoginAttrKinds, LoginAttrs, LoginRequest, NewLoginRequestBody,
+                    NewLoginRequestParams, NewLoginResponse,
+                },
                 grades::{CategoriesResponse, CommentResponse, GradesResponse},
                 //messages::Message,
                 subjects::SubjectsResponse,
@@ -59,6 +63,9 @@ const SYNERGIA_URL: LazyCell<Url> =
 const MESSAGES_URL: LazyCell<Url> =
     LazyCell::new(|| Url::parse("https://wiadomosci.librus.pl").unwrap());
 
+const LIBRUS_API_URL: LazyCell<Url> =
+    LazyCell::new(|| Url::parse("https://api.librus.pl").unwrap());
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("reqwest error")]
@@ -87,6 +94,12 @@ pub enum Error {
     MainAuthenticatedClientConstructionError(#[source] clients::ClientConstructionError),
     #[error("main authenticated client construction failure")]
     MessagesAuthenticatedClientConstructionError(#[source] clients::ClientConstructionError),
+    #[error("captcha request failure")]
+    CaptchaError,
+    #[error("falied to login")]
+    LoginError,
+    #[error("login returned status ok, but no goTo")]
+    LoginWrongStateError,
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -303,6 +316,108 @@ impl SynergiaApi<UnauthenticatedState> {
             AccountSelector::try_new(tokens, tokens_api)
                 .map_err(Error::AccountSelectorConstructionError)
         })
+    }
+
+    async fn catpcha(&self, username: &str) -> Result<()> {
+        debug!("initiating captcha");
+        let req = CaptchaRequest::new(username.to_owned());
+
+        let resp = self
+            .state
+            .client
+            .as_inner()
+            .post(UnauthenticatedSynergiaEndpoints::Captcha.url())
+            .form(&req)
+            .send()
+            .await?
+            .json::<CaptchaResponse>()
+            .await?;
+
+        match resp {
+            CaptchaResponse {
+                is_needed: false, ..
+            } => {
+                debug!("successfully completed captcha");
+                Ok(())
+            }
+            CaptchaResponse {
+                is_needed: true, ..
+            } => Err(Error::CaptchaError),
+        }
+    }
+
+    async fn authorize(&self) -> Result<()> {
+        debug!("authorizing");
+
+        let req = AuthorizationRequest::new();
+
+        self.state
+            .client
+            .as_inner()
+            .get(UnauthenticatedSynergiaEndpoints::Authorization.url())
+            .query(&req)
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    pub async fn new_login(&self, login: &str, password: &str) -> Result<()> {
+        debug!("logging in");
+
+        self.authorize().await?;
+
+        self.catpcha(login).await?;
+
+        let req_body = NewLoginRequestBody::new(login.to_owned(), password.to_owned());
+
+        let resp = self
+            .state
+            .client
+            .as_inner()
+            .post(UnauthenticatedSynergiaEndpoints::Authorization.url())
+            .query(&NewLoginRequestParams::new())
+            .form(&req_body)
+            .send()
+            .await?
+            .json::<NewLoginResponse>()
+            .await?;
+
+        let go_to = match resp {
+            NewLoginResponse {
+                go_to: Some(go_to),
+                status,
+            } if status.as_str() == "ok" => go_to,
+            NewLoginResponse {
+                go_to: None,
+                status,
+            } if status.as_str() == "ok" => return Err(Error::LoginWrongStateError),
+            _ => return Err(Error::LoginError),
+        };
+
+        debug!("successfully completed first login step");
+
+        self.state
+            .client
+            .as_inner()
+            .get(LIBRUS_API_URL.join(&go_to).unwrap())
+            .send()
+            .await?;
+        Ok(())
+    }
+}
+
+enum UnauthenticatedSynergiaEndpoints {
+    Captcha,
+    Authorization,
+}
+
+impl UnauthenticatedSynergiaEndpoints {
+    fn url(&self) -> Url {
+        let endpoint = match self {
+            UnauthenticatedSynergiaEndpoints::Captcha => "/OAuth/Captcha",
+            UnauthenticatedSynergiaEndpoints::Authorization => "/OAuth/Authorization",
+        };
+        LIBRUS_API_URL.join(endpoint).unwrap()
     }
 }
 
