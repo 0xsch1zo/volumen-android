@@ -1,3 +1,4 @@
+use cookie::Cookie;
 use serde::{Deserialize, Serialize};
 use std::{cell::LazyCell, collections::HashMap};
 use url::{form_urlencoded, Url};
@@ -90,6 +91,64 @@ impl NewLoginRequestBody {
 pub struct NewLoginResponse {
     pub status: String,
     pub go_to: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct AuthToken(Cookie<'static>);
+
+impl AuthToken {
+    pub const NAME: &'static str = "oauth_token";
+
+    pub fn new(cookie: Cookie<'static>) -> Self {
+        Self(cookie)
+    }
+}
+
+#[derive(Debug)]
+pub struct PowerCookie(Cookie<'static>);
+
+impl PowerCookie {
+    pub const NAME: &'static str = "DZIENNIKSID";
+
+    pub fn new(cookie: Cookie<'static>) -> Self {
+        Self(cookie)
+    }
+
+    pub fn into_inner(self) -> Cookie<'static> {
+        self.0
+    }
+
+    pub fn to_cookie_string(&self) -> String {
+        self.0.encoded().stripped().to_string()
+    }
+}
+
+#[derive(Debug)]
+pub struct Authentication {
+    pub auth_token: AuthToken,
+    pub power_cookie: PowerCookie,
+}
+
+impl Authentication {
+    pub fn new(auth_token: AuthToken, power_cookie: PowerCookie) -> Self {
+        Self {
+            auth_token,
+            power_cookie,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SecondFactorGoTo(String);
+
+impl SecondFactorGoTo {
+    pub fn new(_0: String) -> Self {
+        Self(_0)
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
 }
 
 #[derive(Debug)]
@@ -269,26 +328,4 @@ impl AuthCode {
 pub struct Tokens {
     pub portal_token_pair: PortalTokenPair,
     pub synergia_tokens: SynergiaTokens,
-}
-
-#[derive(Debug)]
-pub struct PowerCookie(cookie_store::Cookie<'static>);
-
-impl PowerCookie {
-    pub const NAME: &'static str = "DZIENNIKSID";
-    pub const DOMAIN: &'static str = "wiadomosci.librus.pl";
-    pub const PATH: &'static str = "/";
-    pub const URL: LazyCell<Url> = MESSAGES_URL;
-
-    pub fn new(cookie: cookie_store::Cookie<'static>) -> Self {
-        Self(cookie)
-    }
-
-    pub fn into_inner(self) -> cookie_store::Cookie<'static> {
-        self.0
-    }
-
-    pub fn to_cookie_string(&self) -> String {
-        self.0.encoded().stripped().to_string()
-    }
 }

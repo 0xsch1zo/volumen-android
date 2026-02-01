@@ -39,5 +39,7 @@ cookie = { version = "0.18.1", features = ["percent-encode"] }
 derive_more = { version = "2.1.1", features = ["from", "into"] }
 reqwest_cookie_store = "0.9.0"
 cookie_store = "0.22.0"
-bytes = "1.11.0"
 tauri-plugin-stronghold = "2"
+
+[profile.dev.package.scrypt]
+opt-level = 3

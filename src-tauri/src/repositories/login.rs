@@ -1,7 +1,12 @@
 use crate::{
     error::StatefulResultExt,
-    net::{synergia_api::UnauthenticatedState, SynergiaApi},
-    repositories::{account_selection::AccountSelectionRepository, Result, StatefulError},
+    net::{
+        synergia_api::{AuthenticatedState, UnauthenticatedState},
+        SynergiaApi,
+    },
+    repositories::{
+        account_selection::AccountSelectionRepository, MainRepository, Result, StatefulError,
+    },
 };
 
 #[derive(Debug)]
@@ -18,17 +23,15 @@ impl LoginRepository {
 
     pub async fn login(
         self,
-        email: &str,
-        password: &str,
-    ) -> Result<AccountSelectionRepository, StatefulError<Self>> {
-        self.synergia_api.new_login(email, password).await.unwrap();
+        email: String,
+        password: String,
+    ) -> Result<MainRepository, StatefulError<Self>> {
+        let synergia_api = self
+            .synergia_api
+            .new_login(email, password)
+            .await
+            .expect("fix later"); // yeah this sounds very safe
 
-        todo!()
-        /* self.synergia_api
-        .login(email, password)
-        .await
-        .map(AccountSelectionRepository::new)
-        .map_err_state(|s| LoginRepository { synergia_api: s })
-        .map_stateful_err(Into::into)*/
+        Ok(MainRepository::new(synergia_api))
     }
 }

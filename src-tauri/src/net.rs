@@ -146,3 +146,38 @@ impl RequestCookieExt for Request {
         Ok(cookies.into_iter().any(|c| c.name() == cookie_name))
     }
 }
+
+#[derive(Error, Debug)]
+enum ResponseCookieExtError {
+    #[error("failed to convert cookie header to &str")]
+    CookieHeaderToStrError(#[source] ToStrError),
+    #[error("failed parse to parse cookies from the header")]
+    CookieParseError(#[source] cookie::ParseError),
+}
+
+trait ResponseCookieExt {
+    fn extract_cookie(&self, name: &str) -> Result<Option<Cookie>, ResponseCookieExtError>;
+}
+
+impl ResponseCookieExt for Response {
+    fn extract_cookie(&self, name: &str) -> Result<Option<Cookie>, ResponseCookieExtError> {
+        let cookie_headers = self
+            .headers()
+            .get_all(header::COOKIE)
+            .into_iter()
+            .map(HeaderValue::to_str)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(ResponseCookieExtError::CookieHeaderToStrError)?;
+
+        let cookies = cookie_headers
+            .into_iter()
+            .map(Cookie::split_parse_encoded)
+            .map(|cookies| cookies.collect::<Result<Vec<_>, cookie::ParseError>>())
+            .collect::<Result<Vec<_>, cookie::ParseError>>()
+            .map_err(ResponseCookieExtError::CookieParseError)?
+            .into_iter()
+            .flatten();
+
+        Ok(cookies.into_iter().rfind(|c| c.name() == name))
+    }
+}

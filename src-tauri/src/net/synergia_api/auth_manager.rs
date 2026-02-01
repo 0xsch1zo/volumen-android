@@ -18,6 +18,7 @@ use crate::{
             token_management::{TokensApi, TokensApiError},
             AuthenticatedSynergiaEndpoints, MessagesEndpoints,
         },
+        ResponseCookieExt, ResponseCookieExtError,
     },
     sync::SingleParallelFlight,
 };
@@ -98,6 +99,8 @@ pub enum MessagesManagerError {
     CookieParseError(#[source] cookie::ParseError),
     #[error("failed to parse power cookie from raw cookie")]
     PowerCookieParseError(#[source] cookie_store::CookieError),
+    #[error("cookie extraction error")]
+    CookieExtractError(#[source] ResponseCookieExtError),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -202,36 +205,16 @@ impl MessagesAuthManager {
             .map(SynergiaToken::into_cookie_string)
             .map_err(MessagesManagerError::PowerCookieRequestAuthentictationFailure)?;
 
-        let response = self
-            .client
+        self.client
             .get(AuthenticatedSynergiaEndpoints::Me.url())
             .header(header::COOKIE, &authentication)
             .send()
             .await
-            .map_err(MessagesManagerError::PowerCookieAcquisitionFailure)?;
-
-        let cookie_headers = response
-            .headers()
-            .get_all(header::SET_COOKIE)
-            .into_iter()
-            .map(HeaderValue::to_str)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(MessagesManagerError::CookieHeaderToStrError)?;
-
-        let cookies = cookie_headers
-            .into_iter()
-            .map(cookie::Cookie::parse_encoded)
-            .map(|r| r.map_err(MessagesManagerError::CookieParseError))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        debug!("parsed cookies");
-        cookies
-            .into_iter()
-            .find(|c| PowerCookie::NAME == c.name())
-            .map(|c| cookie_store::Cookie::try_from_raw_cookie(&c, &PowerCookie::URL))
-            .ok_or(MessagesManagerError::PowerCookieNotFound)?
-            .map(cookie_store::Cookie::into_owned)
+            .map_err(MessagesManagerError::PowerCookieAcquisitionFailure)?
+            .extract_cookie(PowerCookie::NAME)
+            .map_err(MessagesManagerError::CookieExtractError)?
+            .ok_or(MessagesManagerError::PowerCookieNotFound)
+            .map(cookie::Cookie::into_owned)
             .map(PowerCookie::new)
-            .map_err(MessagesManagerError::PowerCookieParseError)
     }
 }
