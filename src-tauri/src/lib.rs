@@ -103,16 +103,9 @@ pub fn run() {
     .init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_stronghold::Builder::new(|pass| todo!()).build())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let salt_path = app
-                .path()
-                .app_local_data_dir()
-                .expect("could not resolve app local data path")
-                .join("salt.txt");
-            app.handle()
-                .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
-
             let state = Mutex::new(AppStatesInner::try_new()?);
             app.manage(state);
             Ok(())

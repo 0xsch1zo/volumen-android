@@ -9,7 +9,7 @@ use reqwest::{
     Url,
 };
 use reqwest_cookie_store::CookieStoreRwLock;
-use scraper::{error::SelectorErrorKind, Html, Selector};
+use scraper::{Html, Selector};
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
@@ -22,10 +22,9 @@ use crate::{
             account_selector::{AccountSelector, AccountSelectorError},
             api::{
                 auth::{
-                    self, AuthCode, AuthToken, Authentication, AuthorizationRequest,
-                    CaptchaRequest, CaptchaResponse, LoginAttrKinds, LoginAttrs, LoginRequest,
-                    NewLoginRequestBody, NewLoginRequestParams, NewLoginResponse, PowerCookie,
-                    SecondFactorGoTo,
+                    AuthCode, AuthorizationRequest, CaptchaRequest, CaptchaResponse,
+                    LoginAttrKinds, LoginAttrs, LoginRequest, NewLoginRequestBody,
+                    NewLoginRequestParams, NewLoginResponse,
                 },
                 grades::{CategoriesResponse, CommentResponse, GradesResponse},
                 //messages::Message,
@@ -34,11 +33,11 @@ use crate::{
             },
             auth_manager::AuthorizationManager,
             clients::{
-                AuthenticatedClient, /*MessagesAuthenticatedClient,*/ UnauthenticatedClient,
+                MainAuthenticatedClient,
+                /*MessagesAuthenticatedClient,*/ UnauthenticatedClient,
             },
             token_management::{TokensApi, TokensApiError},
         },
-        ResponseCookieExt, ResponseCookieExtError,
     },
     repositories::{
         grades::{Categories, Comment, CommentId, ShallowGrades},
@@ -101,12 +100,6 @@ pub enum Error {
     LoginError,
     #[error("login returned status ok, but no goTo")]
     LoginWrongStateError,
-    #[error("cookie extraction error")]
-    CookieExtractError(#[source] ResponseCookieExtError),
-    #[error("authorization error: power cookie not found")]
-    PowerCookieNotFound,
-    #[error("authorization error: power cookie not found")]
-    AuthTokenNotFound,
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -118,19 +111,15 @@ pub trait ApiState {}
 #[derive(Debug)]
 pub struct UnauthenticatedState {
     client: UnauthenticatedClient,
-    cookie_store: Arc<CookieStoreRwLock>,
 }
 
 impl UnauthenticatedState {
     fn try_new() -> Result<Self> {
-        let cookie_store = Arc::new(CookieStoreRwLock::new(CookieStore::new()));
         Ok(Self {
             client: UnauthenticatedClient::try_new(
-                Arc::clone(&cookie_store),
                 SynergiaApi::<UnauthenticatedState>::redirect_policy(),
             )
             .map_err(Error::UnauthenticatedClientConstructionError)?,
-            cookie_store,
         })
     }
 }
@@ -145,14 +134,16 @@ impl UnauthenticatedRedirectPolicy {
 
 #[derive(Debug)]
 pub struct AuthenticatedState {
-    main_client: AuthenticatedClient,
+    main_client: MainAuthenticatedClient,
     //messages_client: MessagesAuthenticatedClient, // we use a different client because auth works
     //                                              // differently
 }
 
 impl AuthenticatedState {
-    fn try_new(authentication: Authentication) -> Result<Self> {
-        /*let authorization_manager = Arc::new(authorization_manager);
+    fn try_from_auth_manager(
+        authorization_manager: AuthorizationManager,
+    ) -> Result<Self, StatefulError<AuthorizationManager>> {
+        let authorization_manager = Arc::new(authorization_manager);
         let main_client = MainAuthenticatedClient::try_new(Arc::clone(&authorization_manager))
             .map_err(Error::MainAuthenticatedClientConstructionError);
         let main_client = match main_client {
@@ -161,7 +152,7 @@ impl AuthenticatedState {
                 // auth_manager should be dropped alredy
                 return Err(e.into_stateful_err(Arc::into_inner(authorization_manager).unwrap()));
             }
-        };*/
+        };
 
         /*let messages_client =
             MessagesAuthenticatedClient::try_new(cookie_store, Arc::clone(&authorization_manager))
@@ -175,11 +166,10 @@ impl AuthenticatedState {
             }
         };*/
 
-        /*Ok(Self {
+        Ok(Self {
             main_client,
             //messages_client,
-        });*/
-        todo!()
+        })
     }
 }
 
@@ -328,21 +318,6 @@ impl SynergiaApi<UnauthenticatedState> {
         })
     }
 
-    async fn authorize(&self) -> Result<()> {
-        debug!("authorizing");
-
-        let req = AuthorizationRequest::new();
-
-        self.state
-            .client
-            .as_inner()
-            .get(UnauthenticatedSynergiaEndpoints::Authorization.url())
-            .query(&req)
-            .send()
-            .await?;
-        Ok(())
-    }
-
     async fn catpcha(&self, username: &str) -> Result<()> {
         debug!("initiating captcha");
         let req = CaptchaRequest::new(username.to_owned());
@@ -371,35 +346,27 @@ impl SynergiaApi<UnauthenticatedState> {
         }
     }
 
-    fn acquire_authentication(&self) -> Result<Authentication> {
-        let power_cookie = self
-            .state
-            .cookie_store
-            .read()
-            .unwrap()
-            .get(SYNERGIA_URL.as_str(), "/", PowerCookie::NAME)
-            .ok_or(Error::PowerCookieNotFound)
-            .map(ToOwned::to_owned)
-            .map(cookie_store::Cookie::into_owned)
-            .map(Into::into)
-            .map(PowerCookie::new)?;
+    async fn authorize(&self) -> Result<()> {
+        debug!("authorizing");
 
-        let auth_token = self
-            .state
-            .cookie_store
-            .read()
-            .unwrap()
-            .get(SYNERGIA_URL.as_str(), "/", AuthToken::NAME)
-            .ok_or(Error::AuthTokenNotFound)
-            .map(ToOwned::to_owned)
-            .map(cookie_store::Cookie::into_owned)
-            .map(Into::into)
-            .map(AuthToken::new)?;
-        Ok(Authentication::new(auth_token, power_cookie))
+        let req = AuthorizationRequest::new();
+
+        self.state
+            .client
+            .as_inner()
+            .get(UnauthenticatedSynergiaEndpoints::Authorization.url())
+            .query(&req)
+            .send()
+            .await?;
+        Ok(())
     }
 
-    async fn first_login_step(&self, login: String, password: String) -> Result<SecondFactorGoTo> {
-        debug!("starting first login step");
+    pub async fn new_login(&self, login: &str, password: &str) -> Result<()> {
+        debug!("logging in");
+
+        self.authorize().await?;
+
+        self.catpcha(login).await?;
 
         let req_body = NewLoginRequestBody::new(login.to_owned(), password.to_owned());
 
@@ -426,42 +393,16 @@ impl SynergiaApi<UnauthenticatedState> {
             } if status.as_str() == "ok" => return Err(Error::LoginWrongStateError),
             _ => return Err(Error::LoginError),
         };
+
         debug!("successfully completed first login step");
 
-        Ok(SecondFactorGoTo::new(go_to))
-    }
-
-    async fn second_login_step(&self, go_to: SecondFactorGoTo) -> Result<()> {
-        debug!("starting second login step");
         self.state
             .client
             .as_inner()
-            .get(LIBRUS_API_URL.join(&go_to.into_inner()).unwrap())
+            .get(LIBRUS_API_URL.join(&go_to).unwrap())
             .send()
             .await?;
-        debug!("successfully completed second login step");
         Ok(())
-    }
-
-    pub async fn new_login(
-        &self,
-        login: String,
-        password: String,
-    ) -> Result<SynergiaApi<AuthenticatedState>> {
-        debug!("logging in");
-
-        // So much stateful dogshit caused by their shitty api
-        self.authorize().await?;
-
-        self.catpcha(&login).await?;
-
-        let go_to = self.first_login_step(login, password).await?;
-
-        self.second_login_step(go_to).await?;
-
-        let authentication = self.acquire_authentication()?;
-
-        Ok(SynergiaApi::<AuthenticatedState>::try_new(authentication)?)
     }
 }
 
@@ -549,9 +490,11 @@ impl MessagesEndpoints {
 
 // We're using the api of the new ui
 impl SynergiaApi<AuthenticatedState> {
-    fn try_new(authentication: Authentication) -> Result<Self> {
+    fn try_from_auth_manager(
+        authorization_manager: AuthorizationManager,
+    ) -> Result<Self, StatefulError<AuthorizationManager>> {
         Ok(Self {
-            state: AuthenticatedState::try_new(authentication)?,
+            state: AuthenticatedState::try_from_auth_manager(authorization_manager)?,
         })
     }
 

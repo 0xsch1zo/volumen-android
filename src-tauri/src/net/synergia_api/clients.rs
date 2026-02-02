@@ -1,9 +1,9 @@
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use cookie::Cookie;
+use cookie_store::CookieStore;
 use log::debug;
 use reqwest::{Request, Response, StatusCode};
-use reqwest_cookie_store::{CookieStore, CookieStoreRwLock};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
@@ -228,12 +228,11 @@ pub struct UnauthenticatedClient(ClientWithMiddleware);
 
 impl UnauthenticatedClient {
     pub fn try_new(
-        cookie_store: Arc<CookieStoreRwLock>,
         redirect_policy: UnauthenticatedRedirectPolicy,
     ) -> Result<Self, ClientConstructionError> {
         let client = net::default_client_options()
             .redirect(redirect_policy.into_inner())
-            .cookie_provider(cookie_store)
+            .cookie_store(true)
             .build()?;
 
         Ok(Self(
@@ -249,13 +248,13 @@ impl UnauthenticatedClient {
 }
 
 #[derive(Debug)]
-pub struct AuthenticatedClient(ClientWithMiddleware);
+pub struct MainAuthenticatedClient(ClientWithMiddleware);
 
-impl AuthenticatedClient {
+impl MainAuthenticatedClient {
     pub fn try_new(
         authorization_manager: Arc<AuthorizationManager>,
     ) -> Result<Self, ClientConstructionError> {
-        let cookie_store = Arc::new(CookieStoreRwLock::new(CookieStore::new()));
+        let cookie_store = Arc::new(CookieStoreRwLock::new());
         let client = net::default_client_options()
             .cookie_provider(Arc::clone(&cookie_store))
             .build()?;
@@ -278,3 +277,90 @@ impl AuthenticatedClient {
         &self.0
     }
 }
+
+use bytes::Bytes;
+struct CookieStoreRwLock(RwLock<CookieStore>);
+
+impl CookieStoreRwLock {
+    fn new() -> Self {
+        Self(RwLock::new(CookieStore::new()))
+    }
+
+    fn read(
+        &self,
+    ) -> Result<RwLockReadGuard<'_, CookieStore>, PoisonError<RwLockReadGuard<'_, CookieStore>>>
+    {
+        self.0.read()
+    }
+
+    fn write(
+        &self,
+    ) -> Result<RwLockWriteGuard<'_, CookieStore>, PoisonError<RwLockWriteGuard<'_, CookieStore>>>
+    {
+        self.0.write()
+    }
+}
+
+impl reqwest::cookie::CookieStore for CookieStoreRwLock {
+    fn cookies(&self, url: &url::Url) -> Option<tauri::http::HeaderValue> {
+        debug!("queried for cookies");
+        let s = self
+            .0
+            .read()
+            .unwrap()
+            .get_request_values(url)
+            .map(|(name, value)| format!("{}={}", name, value))
+            .collect::<Vec<_>>()
+            .join("; ");
+
+        if s.is_empty() {
+            return None;
+        }
+
+        HeaderValue::from_maybe_shared(Bytes::from(s)).ok()
+    }
+
+    fn set_cookies(
+        &self,
+        cookie_headers: &mut dyn Iterator<Item = &tauri::http::HeaderValue>,
+        url: &url::Url,
+    ) {
+        debug!("should append cookies");
+        let cookies = cookie_headers.filter_map(|val| {
+            debug!("to be appended: {val:?}");
+            std::str::from_utf8(val.as_bytes())
+                .map_err(reqwest_cookie_store::RawCookieParseError::from)
+                .and_then(cookie::Cookie::parse)
+                .inspect_err(|e| debug!("cookie parsing error occuredd: {e:?}"))
+                .map(|c| c.into_owned())
+                .ok()
+        });
+        self.0.write().unwrap().store_response_cookies(cookies, url);
+        debug!("cookies should be appended")
+    }
+}
+
+/*
+#[derive(Debug)]
+pub struct MessagesAuthenticatedClient(ClientWithMiddleware);
+
+impl MessagesAuthenticatedClient {
+    pub fn try_new(
+        cookie_store: Arc<CookieStoreRwLock>,
+        authorization_manager: Arc<AuthorizationManager>,
+    ) -> Result<Self, ClientConstructionError> {
+        let client = net::default_client_options()
+            .cookie_provider(Arc::clone(&cookie_store))
+            .build()?;
+
+        Ok(Self(
+            ClientBuilder::new(client)
+                .with(ErrorStatusMiddleware)
+                .build(),
+        ))
+    }
+
+    pub fn as_inner(&self) -> &ClientWithMiddleware {
+        &self.0
+    }
+} */
