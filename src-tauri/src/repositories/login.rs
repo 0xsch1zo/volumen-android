@@ -21,14 +21,11 @@ impl LoginRepository {
         email: &str,
         password: &str,
     ) -> Result<AccountSelectionRepository, StatefulError<Self>> {
-        self.synergia_api.new_login(email, password).await.unwrap();
-
-        todo!()
-        /* self.synergia_api
-        .login(email, password)
-        .await
-        .map(AccountSelectionRepository::new)
-        .map_err_state(|s| LoginRepository { synergia_api: s })
-        .map_stateful_err(Into::into)*/
+        self.synergia_api
+            .login(email, password)
+            .await
+            .map(AccountSelectionRepository::new)
+            .map_err_state(|s| LoginRepository { synergia_api: s })
+            .map_stateful_err(Into::into)
     }
 }

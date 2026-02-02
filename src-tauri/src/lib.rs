@@ -103,7 +103,6 @@ pub fn run() {
     .init();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_stronghold::Builder::new(|pass| todo!()).build())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let state = Mutex::new(AppStatesInner::try_new()?);
