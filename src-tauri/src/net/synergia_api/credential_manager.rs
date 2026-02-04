@@ -15,7 +15,8 @@ use crate::net::{
         },
         LIBRUS_API_URL, PORTAL_URL, SYNERGIA_URL,
     },
-    ErrorStatusMiddleware, ResponseCookieExt, ResponseCookieExtError,
+    ErrorStatusMiddleware, RequestCookieExt, RequestCookieExtError, ResponseCookieExt,
+    ResponseCookieExtError,
 };
 
 #[derive(Error, Debug, Clone)]
@@ -32,7 +33,6 @@ pub enum CredentialFetchError {
 pub struct PortalCredentialFetchError(#[from] CredentialFetchError);
 
 #[derive(Error, Debug, Clone)]
-#[error(transparent)]
 pub enum LibrusApiCredentialFetchError {
     #[error("synergia account not found")]
     SynergiaAcocuntNotFound,
@@ -41,16 +41,33 @@ pub enum LibrusApiCredentialFetchError {
 }
 
 #[derive(Error, Debug, Clone)]
-#[error(transparent)]
-pub enum SynergiaCredentialFetchError {
-    #[error("general credential fetch error")]
-    GeneralCredentialFetchError(#[from] CredentialFetchError),
+pub enum SynergiaCredentialExtractionError {
     #[error("synergia token not found in login response")]
     SynergiaTokenNotFound,
     #[error("cookie extraction error")]
     CookieExtractionError(#[source] ResponseCookieExtError),
     #[error("power cookie not found in login response")]
     PowerCookieNotFound,
+}
+
+#[derive(Error, Debug, Clone)]
+pub enum SynergiaCredentialFetchError {
+    #[error("general credential fetch error")]
+    GeneralCredentialFetchError(#[from] CredentialFetchError),
+    #[error("credentail extraction error")]
+    CredentialExtractionError(#[source] SynergiaCredentialExtractionError),
+}
+
+#[derive(Error, Debug, Clone)]
+pub enum SynergiaCredentialRefreshError {
+    #[error("credentail extraction error")]
+    CredentialExtractionError(#[source] SynergiaCredentialExtractionError),
+    #[error("refresh request construction error")]
+    RefreshRequestConstructionError(#[source] Arc<reqwest::Error>),
+    #[error("cookie insert error")]
+    CookieInsertError(#[source] RequestCookieExtError),
+    #[error("failed to send refresh request")]
+    RefreshRequestSendError(#[source] Arc<reqwest_middleware::Error>),
 }
 
 #[derive(Error, Debug, Clone)]
@@ -214,8 +231,48 @@ pub struct SynergiaCredentials {
     pub power_cookie: PowerCookie,
 }
 
+impl SynergiaCredentials {
+    fn extract_from_response(resp: &Response) -> Result<Self, SynergiaCredentialExtractionError> {
+        let power_cookie = resp
+            .extract_cookie(PowerCookie::NAME)
+            .map_err(SynergiaCredentialExtractionError::CookieExtractionError)?
+            .map(cookie::Cookie::into_owned)
+            .map(PowerCookie::new)
+            .ok_or(SynergiaCredentialExtractionError::PowerCookieNotFound)?;
+
+        let token = resp
+            .extract_cookie(SynergiaToken::NAME)
+            .map_err(SynergiaCredentialExtractionError::CookieExtractionError)?
+            .map(cookie::Cookie::into_owned)
+            .map(SynergiaToken::new)
+            .ok_or(SynergiaCredentialExtractionError::SynergiaTokenNotFound)?;
+
+        Ok(Self {
+            token,
+            power_cookie,
+        })
+    }
+
+    fn extract_from_response_with_powercookie(
+        resp: &Response,
+        power_cookie: PowerCookie,
+    ) -> Result<Self, SynergiaCredentialExtractionError> {
+        let token = resp
+            .extract_cookie(SynergiaToken::NAME)
+            .map_err(SynergiaCredentialExtractionError::CookieExtractionError)?
+            .map(cookie::Cookie::into_owned)
+            .map(SynergiaToken::new)
+            .ok_or(SynergiaCredentialExtractionError::SynergiaTokenNotFound)?;
+
+        Ok(Self {
+            token,
+            power_cookie,
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
-struct SynergiaCredentialManager {
+pub struct SynergiaCredentialManager {
     client: Arc<ClientWithMiddleware>,
 }
 
@@ -253,39 +310,42 @@ impl SynergiaCredentialManager {
             .await
             .map_err(|e| CredentialFetchError::RequestSendError(Arc::new(e)))?;
 
-        let power_cookie = resp
-            .extract_cookie(PowerCookie::NAME)
-            .map_err(SynergiaCredentialFetchError::CookieExtractionError)?
-            .map(cookie::Cookie::into_owned)
-            .map(PowerCookie::new)
-            .ok_or(SynergiaCredentialFetchError::PowerCookieNotFound)?;
+        SynergiaCredentials::extract_from_response(&resp)
+            .map_err(SynergiaCredentialFetchError::CredentialExtractionError)
+    }
 
-        let synergia_token = resp
-            .extract_cookie(SynergiaToken::NAME)
-            .map_err(SynergiaCredentialFetchError::CookieExtractionError)?
-            .map(cookie::Cookie::into_owned)
-            .map(SynergiaToken::new)
-            .ok_or(SynergiaCredentialFetchError::SynergiaTokenNotFound)?;
+    pub async fn refresh(
+        &self,
+        power_cookie: PowerCookie,
+    ) -> Result<SynergiaCredentials, SynergiaCredentialRefreshError> {
+        const ENDPOINT: &str = "/refreshToken";
+        let mut req = self
+            .client
+            .get(SYNERGIA_URL.join(ENDPOINT).unwrap())
+            .build()
+            .map_err(Arc::new)
+            .map_err(SynergiaCredentialRefreshError::RefreshRequestConstructionError)?;
 
-        Ok(SynergiaCredentials {
-            token: synergia_token,
-            power_cookie,
-        })
+        req.append_cookie(power_cookie.clone().into_inner())
+            .map_err(SynergiaCredentialRefreshError::CookieInsertError)?;
+        let resp = self
+            .client
+            .execute(req)
+            .await
+            .map_err(Arc::new)
+            .map_err(SynergiaCredentialRefreshError::RefreshRequestSendError)?;
+
+        SynergiaCredentials::extract_from_response_with_powercookie(&resp, power_cookie)
+            .map_err(SynergiaCredentialRefreshError::CredentialExtractionError)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Credentials {
-    portal: PortalTokenPair,
+    pub portal: PortalTokenPair,
     #[allow(unused)]
-    librus_api: LibrusApiToken,
-    synergia: SynergiaCredentials,
-}
-
-impl Credentials {
-    pub fn synergia(&self) -> &SynergiaCredentials {
-        &self.synergia
-    }
+    pub librus_api: LibrusApiToken,
+    pub synergia: SynergiaCredentials,
 }
 
 #[derive(Debug)]
@@ -348,8 +408,7 @@ impl CredentialManager {
                 };
 
                 if me.is::<UnauthenticatedError>() {
-                    self.full_refresh_from_token(portal_creds.refresh_token)
-                        .await
+                    self.refresh_from_token(portal_creds.refresh_token).await
                 } else {
                     Err(CredentialManagerError::from(
                         LibrusApiCredentialFetchError::GeneralCredentialFetchError(
@@ -361,7 +420,7 @@ impl CredentialManager {
         }
     }
 
-    async fn full_refresh_from_token(
+    async fn refresh_from_token(
         &self,
         refresh_token: PortalRefreshToken,
     ) -> Result<Credentials, CredentialManagerError> {
@@ -385,9 +444,10 @@ impl CredentialManager {
         &self,
         tokens: Credentials,
     ) -> Result<Credentials, CredentialManagerError> {
-        // TODO: do synergia refresh first then if that fails do a full
-        // or if any are expired
-        self.full_refresh_from_token(tokens.portal.refresh_token)
-            .await
+        self.refresh_from_token(tokens.portal.refresh_token).await
+    }
+
+    pub fn synergia(&self) -> &SynergiaCredentialManager {
+        &self.synergia
     }
 }

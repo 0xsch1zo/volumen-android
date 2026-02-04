@@ -198,6 +198,10 @@ impl PowerCookie {
     pub fn as_inner(&self) -> &cookie::Cookie<'static> {
         &self.0
     }
+
+    pub fn into_inner(self) -> cookie::Cookie<'static> {
+        self.0
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

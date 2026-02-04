@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use cookie::Cookie;
-use log::debug;
+use log::{debug, error};
 use reqwest::{redirect::Policy, Request, Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use tauri::http::Extensions;
@@ -13,7 +13,10 @@ use crate::{
         self,
         synergia_api::{
             api::auth::{PortalTokenPair, SynergiaToken, SynergiaUserId},
-            credential_manager::{CredentialManager, CredentialManagerError, Credentials},
+            credential_manager::{
+                CredentialManager, CredentialManagerError, Credentials,
+                SynergiaCredentialRefreshError,
+            },
             AuthenticatedSynergiaEndpoints, MessagesEndpoints,
         },
         RequestCookieExt, RequestCookieExtError,
@@ -29,8 +32,13 @@ pub enum MainAuthenticatorError {
     CredententialFetchError(#[source] CredentialManagerError),
     #[error("failed to add authentication to request")]
     RequestAuthenticationError(#[source] RequestCookieExtError),
-    #[error("credential refresh error")]
-    CredentialRefreshError(#[source] CredentialManagerError),
+    #[error(
+        "fatal credential refresh error\nPortal and synergia refresh failure\n Full refresh CredentialManagerError: {:?}", .0
+    )]
+    FatalCredentialRefreshError(
+        CredentialManagerError,
+        #[source] SynergiaCredentialRefreshError,
+    ),
     #[error("request send error")]
     RequestSendError(#[source] Arc<reqwest_middleware::Error>),
 }
@@ -53,11 +61,13 @@ impl MainAuthenticator {
             .new_credentials(portal_creds)
             .await
             .map_err(MainAuthenticatorError::CredententialFetchError)?;
-        Ok(Self {
+        let s = Self {
             refresh_worker: SingleParallelFlight::new(),
             credentials: RwLock::new(Some(credentials)),
             credential_manager,
-        })
+        };
+        s.refresh().await?;
+        Ok(s)
     }
 
     async fn refresh(&self) -> Result<(), MainAuthenticatorError> {
@@ -65,12 +75,29 @@ impl MainAuthenticator {
             .work(async || {
                 let mut cred_guard = self.credentials.write().await;
                 let creds = cred_guard.take().unwrap();
-                *cred_guard = Some(
-                    self.credential_manager
-                        .refresh(creds)
-                        .await
-                        .map_err(MainAuthenticatorError::CredentialRefreshError)?,
-                );
+
+                let synergia_creds = self
+                    .credential_manager
+                    .synergia()
+                    .refresh(creds.synergia.power_cookie.clone())
+                    .await;
+
+                match synergia_creds {
+                    Ok(synergia_creds) => {
+                        *cred_guard = Some(Credentials {
+                            synergia: synergia_creds,
+                            ..creds
+                        });
+                    }
+                    Err(synergia_err) => {
+                        error!("synergia refresh failed: {synergia_err:?}");
+                        let creds = self.credential_manager.refresh(creds).await.map_err(|e| {
+                            MainAuthenticatorError::FatalCredentialRefreshError(e, synergia_err)
+                        })?;
+                        *cred_guard = Some(creds);
+                    }
+                };
+
                 Ok(())
             })
             .await?;
@@ -82,7 +109,7 @@ impl MainAuthenticator {
         let token_cookie = cred_guard
             .as_ref()
             .unwrap()
-            .synergia()
+            .synergia
             .token
             .as_inner()
             .to_owned();
@@ -187,10 +214,10 @@ impl MessagesAuthenticator {
             .build()
             .map_err(MessagesAuthenticatorError::ClientInitError)?;
 
-        req.append_cookie(creds.synergia().token.as_inner().to_owned())
+        req.append_cookie(creds.synergia.token.as_inner().to_owned())
             .map_err(MessagesAuthenticatorError::AuthCookieInsertError)?;
 
-        req.append_cookie(creds.synergia().power_cookie.as_inner().to_owned())
+        req.append_cookie(creds.synergia.power_cookie.as_inner().to_owned())
             .map_err(MessagesAuthenticatorError::AuthCookieInsertError)?;
 
         let resp = self.client.execute(req);
@@ -203,7 +230,7 @@ impl MessagesAuthenticator {
         let power_cookie = cred_guard
             .as_ref()
             .unwrap()
-            .synergia()
+            .synergia
             .power_cookie
             .as_inner()
             .to_owned();
