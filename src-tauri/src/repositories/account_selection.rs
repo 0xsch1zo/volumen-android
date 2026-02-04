@@ -45,9 +45,13 @@ impl AccountSelectionRepository {
         Ok(self.account_selector.accounts().await?)
     }
 
-    pub fn select(self, user_id: SynergiaUserId) -> Result<MainRepository, StatefulError<Self>> {
+    pub async fn select(
+        self,
+        user_id: SynergiaUserId,
+    ) -> Result<MainRepository, StatefulError<Self>> {
         self.account_selector
             .select(user_id)
+            .await
             .map(MainRepository::new)
             .map_err_state(AccountSelectionRepository::new)
             .map_stateful_err(Into::into)

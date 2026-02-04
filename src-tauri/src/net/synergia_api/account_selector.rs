@@ -1,4 +1,3 @@
-use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use thiserror::Error;
 
@@ -7,9 +6,7 @@ use crate::{
     net::{
         self,
         synergia_api::{
-            api::auth::{SynergiaAccounts, Tokens},
-            auth_manager::AuthorizationManager,
-            token_management::TokensApi,
+            api::auth::{PortalTokenPair, SynergiaAccounts},
             AuthenticatedState, StatefulError, PORTAL_URL,
         },
         ErrorStatusMiddleware, SynergiaApi,
@@ -29,43 +26,38 @@ type Result<T, E = AccountSelectorError> = std::result::Result<T, E>;
 
 #[derive(Debug)]
 pub struct AccountSelector {
-    tokens: Tokens,
-    tokens_api: TokensApi,
+    portal_creds: PortalTokenPair,
     client: ClientWithMiddleware,
 }
 
 impl AccountSelector {
-    pub fn try_new(tokens: Tokens, tokens_api: TokensApi) -> Result<Self> {
-        let client = net::default_client_options().build()?;
-        let client = ClientBuilder::new(client)
+    pub fn try_new(portal_creds: PortalTokenPair) -> Result<Self> {
+        let client = ClientBuilder::new(net::default_client_options().build()?)
             .with(ErrorStatusMiddleware)
             .build();
         Ok(Self {
-            tokens,
-            tokens_api,
+            portal_creds,
             client,
         })
     }
 
-    pub fn select(
+    pub async fn select(
         self,
         id: SynergiaUserId,
     ) -> Result<SynergiaApi<AuthenticatedState>, StatefulError<Self>> {
-        let auth_manager = AuthorizationManager::new(self.tokens, self.tokens_api, id.into());
-        SynergiaApi::<AuthenticatedState>::try_from_auth_manager(auth_manager)
-            .map_err_state(AuthorizationManager::decay)
-            .map_err_state(|(tokens, tokens_api)| Self {
-                tokens,
-                tokens_api,
+        SynergiaApi::<AuthenticatedState>::init(id.into(), self.portal_creds)
+            .await
+            .map_err_state(|(_, portal_creds)| Self {
+                portal_creds,
                 client: self.client,
             })
     }
 
     pub async fn accounts(&self) -> Result<ModelSynergiaAccounts> {
         const SYNERGIA_ACCOUNT_ENDPOINT: &str = "/api/v3/SynergiaAccounts";
-        let portal_access_token = &self.tokens.portal_token_pair.access_token;
+        let portal_access_token = &self.portal_creds.access_token;
 
-        let client = Client::builder().connection_verbose(true).build()?;
+        let client = net::default_client_options().build()?;
         let client = ClientBuilder::new(client)
             .with(ErrorStatusMiddleware)
             .build();

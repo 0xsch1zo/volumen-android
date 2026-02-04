@@ -1,4 +1,4 @@
-use std::iter;
+use std::{iter, sync::Arc};
 
 use cookie::{self, Cookie};
 use itertools::Itertools;
@@ -7,7 +7,7 @@ use reqwest::{
     Client, ClientBuilder, Request, Response,
 };
 use reqwest_middleware::{Middleware, Next};
-use tauri::http::{Extensions, HeaderMap, HeaderValue};
+use tauri::http::{Extensions, HeaderValue};
 use thiserror::Error;
 
 pub mod synergia_api;
@@ -83,14 +83,14 @@ fn default_client_options() -> ClientBuilder {
         .user_agent(USER_AGENT)
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Clone, Debug)]
 pub enum RequestCookieExtError {
     #[error("failed to convert cookie header to &str")]
-    CookieHeaderToStrError(#[source] ToStrError),
+    CookieHeaderToStrError(#[source] Arc<ToStrError>),
     #[error("failed parse to parse cookies from the header")]
     CookieParseError(#[source] cookie::ParseError),
     #[error("failed to insert new cookie header")]
-    CookieHeaderInsertionError(#[source] InvalidHeaderValue),
+    CookieHeaderInsertionError(#[source] Arc<InvalidHeaderValue>),
 }
 
 // maybe expand to a new type if needed
@@ -105,6 +105,7 @@ impl RequestCookieExt for Request {
         let cookies = match self.headers().get(header::COOKIE) {
             Some(c) => Cookie::split_parse_encoded(
                 c.to_str()
+                    .map_err(Arc::new)
                     .map_err(RequestCookieExtError::CookieHeaderToStrError)?,
             )
             .collect::<Result<Vec<_>, cookie::ParseError>>()
@@ -119,6 +120,7 @@ impl RequestCookieExt for Request {
         self.headers_mut().insert(
             header::COOKIE,
             HeaderValue::from_str(&cookies)
+                .map_err(Arc::new)
                 .map_err(RequestCookieExtError::CookieHeaderInsertionError)?,
         );
 
@@ -132,6 +134,7 @@ impl RequestCookieExt for Request {
             .into_iter()
             .map(HeaderValue::to_str)
             .collect::<Result<Vec<_>, _>>()
+            .map_err(Arc::new)
             .map_err(RequestCookieExtError::CookieHeaderToStrError)?;
 
         let cookies = cookie_headers
@@ -144,5 +147,39 @@ impl RequestCookieExt for Request {
             .flatten();
 
         Ok(cookies.into_iter().any(|c| c.name() == cookie_name))
+    }
+}
+
+#[derive(Error, Clone, Debug)]
+pub enum ResponseCookieExtError {
+    #[error("failed to convert cookie header to &str")]
+    CookieHeaderToStrError(#[source] Arc<ToStrError>),
+    #[error("failed parse to parse cookies from the header")]
+    CookieParseError(#[source] cookie::ParseError),
+}
+
+trait ResponseCookieExt {
+    fn extract_cookie(&self, name: &str) -> Result<Option<Cookie>, ResponseCookieExtError>;
+}
+
+impl ResponseCookieExt for Response {
+    fn extract_cookie(&self, name: &str) -> Result<Option<Cookie>, ResponseCookieExtError> {
+        let cookie_headers = self
+            .headers()
+            .get_all(header::SET_COOKIE)
+            .into_iter()
+            .map(HeaderValue::to_str)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Arc::new)
+            .map_err(ResponseCookieExtError::CookieHeaderToStrError)?;
+
+        let cookies = cookie_headers
+            .into_iter()
+            .map(Cookie::parse_encoded)
+            .collect::<Result<Vec<_>, cookie::ParseError>>()
+            .map_err(ResponseCookieExtError::CookieParseError)?
+            .into_iter();
+
+        Ok(cookies.into_iter().rfind(|c| c.name() == name))
     }
 }

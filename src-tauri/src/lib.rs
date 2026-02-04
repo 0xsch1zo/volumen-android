@@ -37,7 +37,7 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .state_transition::<UnauthenticatedState, AccountSelectionState>(async |s| {
             let account_selection_repo = s
                 .login_repo
-                .login(&login, &password)
+                .login(login, password)
                 .await
                 .map_err_state(UnauthenticatedState::new)
                 .map_stateful_err(Into::into)?;
@@ -64,6 +64,7 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
             Ok(AuthenticatedState::new(
                 s.account_selection_repo
                     .select(accounts[0].id)
+                    .await
                     .map_err_state(AccountSelectionState::new)
                     .map_stateful_err(Into::into)?,
             ))

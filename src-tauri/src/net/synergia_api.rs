@@ -1,6 +1,6 @@
 use std::{borrow::Cow, cell::LazyCell, sync::Arc};
 
-use cookie_store::CookieStore;
+use futures::TryFutureExt;
 use itertools::Itertools;
 use log::{debug, warn};
 use reqwest::{
@@ -8,31 +8,29 @@ use reqwest::{
     redirect::Policy,
     Url,
 };
-use reqwest_cookie_store::CookieStoreRwLock;
 use scraper::{Html, Selector};
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 use crate::{
     common::TakeExactlyExt,
-    error::{self, IntoStatefulErrorExt},
+    error,
     net::{
         self,
         synergia_api::{
             account_selector::{AccountSelector, AccountSelectorError},
             api::{
-                auth::{AuthCode, LoginAttrKinds, LoginAttrs, LoginRequest},
+                auth::{
+                    AuthCode, LoginAttrKinds, LoginAttrs, LoginRequest, PortalTokenPair,
+                    SynergiaUserId,
+                },
                 grades::{CategoriesResponse, CommentResponse, GradesResponse},
-                //messages::Message,
                 subjects::SubjectsResponse,
                 users::UsersResponse,
             },
-            auth_manager::AuthorizationManager,
-            clients::{
-                MainAuthenticatedClient,
-                /*MessagesAuthenticatedClient,*/ UnauthenticatedClient,
-            },
-            token_management::{TokensApi, TokensApiError},
+            authenticators::{MainAuthenticator, MainAuthenticatorError},
+            clients::{MainAuthenticatedClient, UnauthenticatedClient},
+            credential_manager::{PortalCredentialFetchError, PortalCredentialManager},
         },
     },
     repositories::{
@@ -45,9 +43,9 @@ use crate::{
 
 pub mod account_selector;
 mod api;
-mod auth_manager;
+mod authenticators;
 mod clients;
-pub mod token_management;
+pub mod credential_manager;
 
 pub use api::messages::Message; // TODO: remove this after creating a repository for messages
 
@@ -55,6 +53,9 @@ const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.li
 
 const SYNERGIA_URL: LazyCell<Url> =
     LazyCell::new(|| Url::parse("https://synergia.librus.pl").unwrap());
+
+const LIBRUS_API_URL: LazyCell<Url> =
+    LazyCell::new(|| Url::parse("https://api.librus.pl").unwrap());
 
 const MESSAGES_URL: LazyCell<Url> =
     LazyCell::new(|| Url::parse("https://wiadomosci.librus.pl").unwrap());
@@ -77,16 +78,24 @@ pub enum Error {
     AuthCodeNotFound,
     #[error("invalid header value")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
-    #[error("token fetch error")]
-    TokenFetchError(#[source] TokensApiError),
     #[error("account selector construction error")]
     AccountSelectorConstructionError(#[source] AccountSelectorError),
+    #[error("main authenticator init error")]
+    MainAuthenticatorInitError(#[source] MainAuthenticatorError),
     #[error("unauthenticated client construction failure")]
-    UnauthenticatedClientConstructionError(#[source] clients::ClientConstructionError),
+    UnauthenticatedClientConstructionError(
+        #[source] clients::UnauthenticatedClientConstructionError,
+    ),
     #[error("main authenticated client construction failure")]
-    MainAuthenticatedClientConstructionError(#[source] clients::ClientConstructionError),
+    MainAuthenticatedClientConstructionError(
+        #[source] clients::AuthenticatedClientConstructionError,
+    ),
     #[error("main authenticated client construction failure")]
-    MessagesAuthenticatedClientConstructionError(#[source] clients::ClientConstructionError),
+    MessagesAuthenticatedClientConstructionError(#[source] clients::MessagesClientInitError),
+    #[error("portal cred manager construciton error")]
+    PortalCredManagerConstructionError(#[source] credential_manager::PortalClientConstructionError),
+    #[error("portal credential fetch errro")]
+    PortalCredFetchError(#[source] PortalCredentialFetchError),
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -122,41 +131,34 @@ impl UnauthenticatedRedirectPolicy {
 #[derive(Debug)]
 pub struct AuthenticatedState {
     main_client: MainAuthenticatedClient,
-    //messages_client: MessagesAuthenticatedClient, // we use a different client because auth works
-    //                                              // differently
+    //messages_client: MessagesClient, // we use a different client because auth works
+    // differently
 }
 
 impl AuthenticatedState {
-    fn try_from_auth_manager(
-        authorization_manager: AuthorizationManager,
-    ) -> Result<Self, StatefulError<AuthorizationManager>> {
-        let authorization_manager = Arc::new(authorization_manager);
-        let main_client = MainAuthenticatedClient::try_new(Arc::clone(&authorization_manager))
-            .map_err(Error::MainAuthenticatedClientConstructionError);
-        let main_client = match main_client {
-            Ok(c) => c,
-            Err(e) => {
-                // auth_manager should be dropped alredy
-                return Err(e.into_stateful_err(Arc::into_inner(authorization_manager).unwrap()));
-            }
+    async fn init(
+        user_id: SynergiaUserId,
+        portal_creds: PortalTokenPair,
+    ) -> Result<Self, StatefulError<(SynergiaUserId, PortalTokenPair)>> {
+        let main_authenticator = stateful_result! { (user_id, portal_creds) =>
+            MainAuthenticator::init(user_id, portal_creds.clone())
+                    .await
+                    .map(Arc::new)
+                    .map_err(Error::MainAuthenticatorInitError)
         };
 
-        /*let messages_client =
-            MessagesAuthenticatedClient::try_new(cookie_store, Arc::clone(&authorization_manager))
-                .map_err(Error::MessagesAuthenticatedClientConstructionError);
-        let messages_client = match messages_client {
-            Ok(c) => c,
-            Err(e) => {
-                drop(main_client);
-                // auth_manager should be dropped alredy
-                return Err(e.into_stateful_err(Arc::into_inner(authorization_manager).unwrap()));
-            }
+        let main_client = stateful_result! { (user_id, portal_creds) =>
+            MainAuthenticatedClient::try_new(Arc::clone(&main_authenticator))
+                .map_err(Error::MainAuthenticatedClientConstructionError)
+        };
+
+        /*let messages_client = stateful_result! { (user_id, portal_creds) =>
+            MessagesClient::init(Arc::clone(&main_authenticator))
+                .await
+                .map_err(Error::MessagesAuthenticatedClientConstructionError)
         };*/
 
-        Ok(Self {
-            main_client,
-            //messages_client,
-        })
+        Ok(Self { main_client })
     }
 }
 
@@ -272,8 +274,8 @@ impl SynergiaApi<UnauthenticatedState> {
 
     pub async fn login(
         self,
-        email: &str,
-        password: &str,
+        email: String,
+        password: String,
     ) -> Result<AccountSelector, StatefulError<Self>> {
         debug!("logging in to librus");
         let attrs = stateful_result! { self => self.fetch_login_attrs().await };
@@ -281,8 +283,8 @@ impl SynergiaApi<UnauthenticatedState> {
         let auth_code = stateful_result! { self =>
             self
                 .fetch_auth_code(&LoginRequest {
-                    email: email.to_owned(),
-                    password: password.to_owned(),
+                    email,
+                    password,
                     attrs,
                 })
                 .await
@@ -291,16 +293,19 @@ impl SynergiaApi<UnauthenticatedState> {
 
         debug!("successfully logged in");
 
-        let tokens_api = TokensApi::new();
-        let tokens = stateful_result! { self =>
-            tokens_api
-                .fetch_tokens(auth_code)
+        let portal_cred_manager = stateful_result! { self  =>
+            PortalCredentialManager::try_new()
+                .map_err(Error::PortalCredManagerConstructionError)
+        };
+
+        let portal_creds = stateful_result! { self =>
+            portal_cred_manager.fetch_from_authcode(&auth_code)
                 .await
-                .map_err(Error::TokenFetchError)
+                .map_err(Error::PortalCredFetchError)
         };
 
         Ok(stateful_result! { self =>
-            AccountSelector::try_new(tokens, tokens_api)
+            AccountSelector::try_new(portal_creds)
                 .map_err(Error::AccountSelectorConstructionError)
         })
     }
@@ -375,11 +380,12 @@ impl MessagesEndpoints {
 
 // We're using the api of the new ui
 impl SynergiaApi<AuthenticatedState> {
-    fn try_from_auth_manager(
-        authorization_manager: AuthorizationManager,
-    ) -> Result<Self, StatefulError<AuthorizationManager>> {
+    async fn init(
+        user_id: SynergiaUserId,
+        portal_creds: PortalTokenPair,
+    ) -> Result<Self, StatefulError<(SynergiaUserId, PortalTokenPair)>> {
         Ok(Self {
-            state: AuthenticatedState::try_from_auth_manager(authorization_manager)?,
+            state: AuthenticatedState::init(user_id, portal_creds).await?,
         })
     }
 

@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::{cell::LazyCell, collections::HashMap};
-use url::{form_urlencoded, Url};
+use std::collections::HashMap;
 
-use crate::{net::synergia_api::MESSAGES_URL, repositories::account_selection as models};
+use crate::repositories::account_selection as models;
+
 #[derive(Debug)]
 pub enum LoginAttrKinds {
     RedirectTo,
@@ -109,53 +109,65 @@ pub struct PortalTokenPair {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[repr(transparent)]
 #[serde(transparent)]
-pub struct SynergiaToken(String);
+pub struct LibrusApiToken(String);
 
-impl SynergiaToken {
-    const NAME: &str = "oauth_token";
-
+impl LibrusApiToken {
     pub fn as_inner(&self) -> &str {
         &self.0
-    }
-
-    pub fn into_cookie_string(self) -> String {
-        let value = form_urlencoded::byte_serialize(self.0.as_bytes()).collect::<String>();
-        format!("{}={}", Self::NAME, value)
     }
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SynergiaTokenEntry {
+struct LibrusApiTokenEntry {
     pub id: SynergiaUserId,
-    pub access_token: SynergiaToken,
+    pub access_token: LibrusApiToken,
 }
 
 #[derive(Serialize, Deserialize)]
-struct RawSynergiaTokens {
-    accounts: Vec<SynergiaTokenEntry>,
+struct RawLibrusApiTokens {
+    accounts: Vec<LibrusApiTokenEntry>,
 }
 
-impl From<RawSynergiaTokens> for SynergiaTokens {
-    fn from(value: RawSynergiaTokens) -> Self {
+impl From<RawLibrusApiTokens> for LibrusApiTokens {
+    fn from(value: RawLibrusApiTokens) -> Self {
         let tokens = value
             .accounts
             .into_iter()
             .map(|entry| (entry.id, entry.access_token))
-            .collect::<HashMap<SynergiaUserId, SynergiaToken>>();
+            .collect::<HashMap<SynergiaUserId, LibrusApiToken>>();
         Self { inner: tokens }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(from = "RawSynergiaTokens")]
-pub struct SynergiaTokens {
-    inner: HashMap<SynergiaUserId, SynergiaToken>,
+#[serde(from = "RawLibrusApiTokens")]
+pub struct LibrusApiTokens {
+    inner: HashMap<SynergiaUserId, LibrusApiToken>,
 }
 
-impl SynergiaTokens {
-    pub fn inner(&self) -> &HashMap<SynergiaUserId, SynergiaToken> {
-        &self.inner
+impl LibrusApiTokens {
+    pub fn into_inner(self) -> HashMap<SynergiaUserId, LibrusApiToken> {
+        self.inner
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SynergiaToken(cookie::Cookie<'static>);
+
+impl SynergiaToken {
+    pub const NAME: &str = "oauth_token";
+
+    pub fn new(_0: cookie::Cookie<'static>) -> Self {
+        Self(_0)
+    }
+
+    pub fn as_inner(&self) -> &cookie::Cookie<'static> {
+        &self.0
+    }
+
+    pub fn to_cookie_string(&self) -> String {
+        self.0.encoded().stripped().to_string()
     }
 }
 
@@ -167,39 +179,37 @@ impl AuthCode {
     pub fn new(code: String) -> Self {
         Self(code)
     }
+
     pub fn as_inner(&self) -> &str {
         &self.0
     }
-
-    pub fn into_inner(self) -> String {
-        self.0
-    }
 }
 
-#[derive(Debug, Clone)]
-pub struct Tokens {
-    pub portal_token_pair: PortalTokenPair,
-    pub synergia_tokens: SynergiaTokens,
-}
-
-#[derive(Debug)]
-pub struct PowerCookie(cookie_store::Cookie<'static>);
+#[derive(Clone, Debug)]
+pub struct PowerCookie(cookie::Cookie<'static>);
 
 impl PowerCookie {
     pub const NAME: &'static str = "DZIENNIKSID";
-    pub const DOMAIN: &'static str = "wiadomosci.librus.pl";
-    pub const PATH: &'static str = "/";
-    pub const URL: LazyCell<Url> = MESSAGES_URL;
 
-    pub fn new(cookie: cookie_store::Cookie<'static>) -> Self {
+    pub fn new(cookie: cookie::Cookie<'static>) -> Self {
         Self(cookie)
     }
 
-    pub fn into_inner(self) -> cookie_store::Cookie<'static> {
-        self.0
+    pub fn as_inner(&self) -> &cookie::Cookie<'static> {
+        &self.0
     }
+}
 
-    pub fn to_cookie_string(&self) -> String {
-        self.0.encoded().stripped().to_string()
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AutoLoginToken(String);
+
+impl AutoLoginToken {
+    pub fn as_inner(&self) -> &str {
+        &self.0
     }
+}
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct AutoLoginResponse {
+    pub token: AutoLoginToken,
 }

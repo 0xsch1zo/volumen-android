@@ -18,8 +18,8 @@ impl LoginRepository {
 
     pub async fn login(
         self,
-        email: &str,
-        password: &str,
+        email: String,
+        password: String,
     ) -> Result<AccountSelectionRepository, StatefulError<Self>> {
         self.synergia_api
             .login(email, password)
