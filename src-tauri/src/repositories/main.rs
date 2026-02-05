@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    net::{
-        synergia_api::{AuthenticatedState, Message},
-        SynergiaApi,
-    },
+    net::{synergia_api::AuthenticatedState, SynergiaApi},
     repositories::{
         grades::{Grade, GradeDetails, GradesRepository},
+        messages::{Limit, Page, RecievedMessagePreviews},
         Result,
     },
 };
@@ -37,7 +35,15 @@ impl MainRepository {
         Ok(self.grades.details(&grade).await?)
     }
 
-    pub async fn messages_recieved(&self) -> Result<Vec<Message>> {
-        Ok(self.synergia_api.messages().fetch_recieved().await?)
+    pub async fn messages_recieved(
+        &self,
+        page: Page,
+        limit: Limit,
+    ) -> Result<RecievedMessagePreviews> {
+        Ok(self
+            .synergia_api
+            .messages()
+            .fetch_recieved(page, limit)
+            .await?)
     }
 }

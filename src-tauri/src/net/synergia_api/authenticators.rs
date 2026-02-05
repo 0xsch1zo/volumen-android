@@ -17,7 +17,7 @@ use crate::{
                 CredentialManager, CredentialManagerError, Credentials,
                 SynergiaCredentialRefreshError,
             },
-            AuthenticatedSynergiaEndpoints, MessagesEndpoints,
+            AuthenticatedSynergiaEndpoints, MessagesEndpoints, MESSAGES_URL, SYNERGIA_URL,
         },
         RequestCookieExt, RequestCookieExtError,
     },
@@ -170,6 +170,10 @@ pub enum MessagesAuthenticatorError {
     ClientInitError(#[source] reqwest::Error),
     #[error("failed to insert authorization cookie")]
     AuthCookieInsertError(#[source] RequestCookieExtError),
+    #[error("authorization request send error")]
+    AuthorizationRequestSendError(#[source] reqwest_middleware::Error),
+    #[error("failed to authorize module")]
+    AuthorizationError,
 }
 
 pub struct MessagesAuthenticator {
@@ -183,7 +187,7 @@ impl MessagesAuthenticator {
     ) -> Result<Self, MessagesAuthenticatorError> {
         let client = ClientBuilder::new(
             net::default_client_options()
-                .redirect(Self::redirect_policy())
+                .redirect(Policy::default()) // we need redirects, just being more explicit
                 .build()
                 .map_err(MessagesAuthenticatorError::ClientInitError)?,
         )
@@ -195,13 +199,6 @@ impl MessagesAuthenticator {
         };
         authenticator.authorize().await?;
         Ok(authenticator)
-    }
-
-    fn redirect_policy() -> Policy {
-        Policy::custom(|attempt| {
-            debug!("following redirect: {}", attempt.url());
-            attempt.follow()
-        })
     }
 
     async fn authorize(&self) -> Result<(), MessagesAuthenticatorError> {
@@ -220,9 +217,20 @@ impl MessagesAuthenticator {
         req.append_cookie(creds.synergia.power_cookie.as_inner().to_owned())
             .map_err(MessagesAuthenticatorError::AuthCookieInsertError)?;
 
-        let resp = self.client.execute(req);
-        // TODO
-        Ok(())
+        let resp = self
+            .client
+            .execute(req)
+            .await
+            .map_err(MessagesAuthenticatorError::AuthorizationRequestSendError)?;
+
+        let successful_authorization_url = MESSAGES_URL.join("/nowy/").unwrap();
+
+        // if we got to this url we should be good
+        if *resp.url() == successful_authorization_url {
+            Ok(())
+        } else {
+            Err(MessagesAuthenticatorError::AuthorizationError)
+        }
     }
 
     async fn authenticate(&self, req: &mut Request) -> Result<(), MainAuthenticatorError> {

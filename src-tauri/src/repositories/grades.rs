@@ -5,7 +5,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
-    cache::{AutoKeyedCache, CacheComputeError, Keyable},
+    cache::{AutoKeyedCache, CacheComputeError, Keyable, SingleEntryCache},
     net::{
         synergia_api::{self, AuthenticatedState},
         SynergiaApi,
@@ -83,6 +83,7 @@ pub enum GradeKind {
 }
 
 impl GradeKind {
+    // TODO: maybe allow for multiple types of grade at once
     fn from_shallow_grade(shallow_grade: &ShallowGrade) -> Self {
         // making the dogshit that librus sends digestible to a normal application
         // don't blame me, it is not my fault, I'm just trying to fix this mess
@@ -146,6 +147,8 @@ pub struct Grade {
     pub kind: GradeKind,
 }
 
+type Grades = Vec<Grade>;
+
 #[derive(Debug)]
 pub struct GradeDetails {
     pub added_by: User,
@@ -200,7 +203,7 @@ pub struct GradesRepository {
     users: UsersRepository,
     subjects: SubjectsRepository,
     categories: CategoriesRepository,
-    cache: AutoKeyedCache<GradeId, ShallowGrade>,
+    cache: SingleEntryCache<ShallowGrades>,
 }
 
 impl GradesRepository {
@@ -216,23 +219,22 @@ impl GradesRepository {
             users,
             subjects,
             categories,
-            cache: AutoKeyedCache::new(),
+            cache: SingleEntryCache::new(),
         }
     }
 
-    pub async fn grades(&self) -> Result<Vec<Grade>, Error> {
-        if self.cache.iter().next().is_none() {
-            self.cache
-                .try_bulk_insert_with(async {
-                    Ok::<_, synergia_api::Error>(self.synergia_api.grades().fetch_self().await?)
-                })
-                .await
-                .map_err(Error::GradeFetchFailed)?;
-        }
+    pub async fn grades(&self) -> Result<Grades, Error> {
+        let shallow_grades = self
+            .cache
+            .try_get_with(async {
+                Ok::<_, synergia_api::Error>(self.synergia_api.grades().fetch_self().await?)
+            })
+            .await
+            .map_err(Error::GradeFetchFailed)?;
 
         let grades_factory = GradesFactory::new(&self.subjects, &self.categories);
         // TODO: figure out an optimal buffering amount
-        let grades = stream::iter(self.cache.iter().map(|(_, v)| v))
+        let grades = stream::iter(shallow_grades)
             .map(async |s| grades_factory.create_from_shallow(s).await)
             .buffer_unordered(10)
             .try_collect::<Vec<_>>()
@@ -250,8 +252,8 @@ impl GradesRepository {
         let comments_repo = Arc::new(self.comments.clone());
         let comments_fut = stream::iter(grade.comments.iter().cloned())
             .then(|c| {
-                // Tauri will shoot you if you won't do otherwise
-                // Parallell isn't worth it here
+                // Tauri will shoot you if you do otherwise
+                // Parallel isn't worth it here
                 let comments_repo = Arc::clone(&comments_repo);
                 async move { comments_repo.comment(c).await }
             })

@@ -165,10 +165,6 @@ impl SynergiaToken {
     pub fn as_inner(&self) -> &cookie::Cookie<'static> {
         &self.0
     }
-
-    pub fn to_cookie_string(&self) -> String {
-        self.0.encoded().stripped().to_string()
-    }
 }
 
 #[derive(Debug)]

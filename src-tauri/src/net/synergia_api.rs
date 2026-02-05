@@ -1,6 +1,5 @@
 use std::{borrow::Cow, cell::LazyCell, sync::Arc};
 
-use futures::TryFutureExt;
 use itertools::Itertools;
 use log::{debug, warn};
 use reqwest::{
@@ -25,16 +24,18 @@ use crate::{
                     SynergiaUserId,
                 },
                 grades::{CategoriesResponse, CommentResponse, GradesResponse},
+                messages::{self, MessageModelConversionError},
                 subjects::SubjectsResponse,
                 users::UsersResponse,
             },
             authenticators::{MainAuthenticator, MainAuthenticatorError},
-            clients::{MainAuthenticatedClient, UnauthenticatedClient},
+            clients::{MainAuthenticatedClient, MessagesClient, UnauthenticatedClient},
             credential_manager::{PortalCredentialFetchError, PortalCredentialManager},
         },
     },
     repositories::{
         grades::{Categories, Comment, CommentId, ShallowGrades},
+        messages::{Limit, Page, RecievedMessagePreviews},
         subjects::Subjects,
         users::Users,
     },
@@ -46,8 +47,6 @@ mod api;
 mod authenticators;
 mod clients;
 pub mod credential_manager;
-
-pub use api::messages::Message; // TODO: remove this after creating a repository for messages
 
 const PORTAL_URL: LazyCell<Url> = LazyCell::new(|| Url::parse("https://portal.librus.pl").unwrap());
 
@@ -96,6 +95,14 @@ pub enum Error {
     PortalCredManagerConstructionError(#[source] credential_manager::PortalClientConstructionError),
     #[error("portal credential fetch errro")]
     PortalCredFetchError(#[source] PortalCredentialFetchError),
+    #[error("model conversion error")]
+    ModelConversionError(#[from] ModelConversionError),
+}
+
+#[derive(Error, Debug)]
+pub enum ModelConversionError {
+    #[error("message model conversion error")]
+    MessageConvError(#[from] MessageModelConversionError),
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -131,8 +138,8 @@ impl UnauthenticatedRedirectPolicy {
 #[derive(Debug)]
 pub struct AuthenticatedState {
     main_client: MainAuthenticatedClient,
-    //messages_client: MessagesClient, // we use a different client because auth works
-    // differently
+    messages_client: MessagesClient, // we use a different client because auth works
+                                     // differently
 }
 
 impl AuthenticatedState {
@@ -152,13 +159,16 @@ impl AuthenticatedState {
                 .map_err(Error::MainAuthenticatedClientConstructionError)
         };
 
-        /*let messages_client = stateful_result! { (user_id, portal_creds) =>
+        let messages_client = stateful_result! { (user_id, portal_creds) =>
             MessagesClient::init(Arc::clone(&main_authenticator))
                 .await
                 .map_err(Error::MessagesAuthenticatedClientConstructionError)
-        };*/
+        };
 
-        Ok(Self { main_client })
+        Ok(Self {
+            main_client,
+            messages_client,
+        })
     }
 }
 
@@ -479,38 +489,48 @@ impl<'a> MessagesManager<'a> {
         Self { synergia_api }
     }
 
-    /*pub async fn feth_message_endpoint<T: DeserializeOwned>(&self endpoint: AuthenticatedSynergiaEndpoints) -> Result<T> {
-    w        debug!("fetching {endpoint:?}");
-            let resource = self
-                .synergia_api
-                .state
-                .m
-                .as_inner()
-                .get(endpoint.url())
-                .send()
-                .await?
-                .json::<T>()
-                .await?;
-            debug!("fetched {endpoint:?} succesfully");
-            Ok(resource)
-        }
-        }*/
-
-    pub async fn fetch_recieved(&self) -> Result<Vec<Message>> {
-        Ok(self
+    async fn fetch_message_endpoint<T: DeserializeOwned>(
+        &self,
+        endpoint: AuthenticatedSynergiaEndpoints,
+    ) -> Result<T> {
+        debug!("fetching message endpoint: {endpoint:?}");
+        let resource = self
             .synergia_api
-            .fetch_synergia_endpoint::<Vec<Message>>(AuthenticatedSynergiaEndpoints::Messages(
-                MessagesEndpoints::Recieved { page: 1, limit: 10 },
-            ))
-            .await?)
+            .state
+            .messages_client
+            .as_inner()
+            .get(endpoint.url())
+            .send()
+            .await?
+            .json::<T>()
+            .await?;
+        debug!("fetched message endpoint: {endpoint:?} succesfully");
+        Ok(resource)
     }
 
-    pub async fn fetch_sent(&self) -> Result<Vec<Message>> {
+    pub async fn fetch_recieved(
+        &self,
+        page: Page,
+        limit: Limit,
+    ) -> Result<RecievedMessagePreviews> {
+        Ok(self
+            .fetch_message_endpoint::<messages::RecievedMessagePreviews>(
+                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::Recieved {
+                    page: page.into_inner(),
+                    limit: limit.into_inner(),
+                }),
+            )
+            .await?
+            .try_into()
+            .map_err(ModelConversionError::from)?)
+    }
+
+    /*pub async fn fetch_sent(&self) -> Result<Vec<Message>> {
         Ok(self
             .synergia_api
             .fetch_synergia_endpoint::<Vec<Message>>(AuthenticatedSynergiaEndpoints::Messages(
                 MessagesEndpoints::Sent { page: 1, limit: 10 },
             ))
             .await?)
-    }
+    }*/
 }

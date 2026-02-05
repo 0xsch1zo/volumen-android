@@ -100,7 +100,7 @@ impl From<CategoriesResponse> for models::Categories {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq, Hash)]
 #[serde(from = "Reference")]
-pub(super) struct GradeId(usize);
+struct GradeId(usize);
 
 impl From<Reference> for GradeId {
     fn from(value: Reference) -> Self {
@@ -116,7 +116,7 @@ impl From<GradeId> for models::GradeId {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "PascalCase")]
-pub(super) struct ShallowGrade {
+struct ShallowGrade {
     id: GradeId,
     subject: SubjectId,
     category: CategoryId,

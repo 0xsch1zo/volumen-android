@@ -10,6 +10,7 @@ pub mod account_selection;
 pub mod grades;
 pub mod login;
 pub mod main;
+pub mod messages;
 pub mod subjects;
 pub mod users;
 

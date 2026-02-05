@@ -57,7 +57,7 @@ impl<
     }
 
     // There is an implementation of try_get_with in moka already, but to provide consistent behaviour
-    // we're rolling our own. What could possible go wrong?
+    // we're rolling our own. What could possibly go wrong?
     #[allow(unused)]
     pub async fn get_with(&self, key: &K, init: impl Future<Output = V>) -> V {
         if let Some(v) = self.get(key).await {
@@ -122,5 +122,64 @@ impl<
 
     pub fn iter(&self) -> impl Iterator<Item = (Arc<K>, V)> + use<'_, K, V> {
         self.cache.iter()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SingleEntryCache<V: Send + Sync + Clone + 'static> {
+    cache: Cache<(), V>,
+    get_with_worker: Arc<SingleParallelFlight<V>>,
+    try_get_with_worker: Arc<SingleParallelFlight<Result<V, CacheComputeError>>>,
+}
+
+impl<V: Send + Sync + Clone + 'static> SingleEntryCache<V> {
+    pub fn new() -> Self {
+        Self {
+            cache: Cache::builder().build(),
+            get_with_worker: Arc::new(SingleParallelFlight::new()),
+            try_get_with_worker: Arc::new(SingleParallelFlight::new()),
+        }
+    }
+
+    pub async fn get(&self) -> Option<V> {
+        self.cache.get(&()).await
+    }
+
+    pub async fn insert(&self, value: V) {
+        self.cache.insert((), value).await;
+    }
+
+    // There is an implementation of try_get_with in moka already, but to provide consistent behaviour
+    // we're rolling our own. What could possibly go wrong?
+    #[allow(unused)]
+    pub async fn get_with(&self, init: impl Future<Output = V>) -> V {
+        if let Some(v) = self.get().await {
+            return v;
+        }
+        self.get_with_worker
+            .work(async || {
+                let value = init.await;
+                self.insert(value.clone()).await;
+                value
+            })
+            .await
+    }
+
+    pub async fn try_get_with<E: std::error::Error + Send + Sync + 'static>(
+        &self,
+        init: impl Future<Output = Result<V, E>>,
+    ) -> Result<V, CacheComputeError> {
+        if let Some(v) = self.get().await {
+            return Ok(v);
+        }
+        let v = self
+            .try_get_with_worker
+            .work(async || {
+                let value = init.await.map_err(CacheComputeError::from_err)?;
+                self.insert(value.clone()).await;
+                Ok(value)
+            })
+            .await?;
+        Ok(v)
     }
 }
