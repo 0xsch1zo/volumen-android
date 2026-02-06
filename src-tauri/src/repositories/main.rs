@@ -6,7 +6,10 @@ use crate::{
     net::{synergia_api::AuthenticatedState, SynergiaApi},
     repositories::{
         grades::{self, Grade, GradeDetails, GradesRepository},
-        messages::{self, Limit, MessagesRepository, Page, RecievedMessagePreviews},
+        messages::{
+            self, Limit, MessageId, MessagesRepository, Page, RecievedMessage,
+            RecievedMessagePreviews,
+        },
         Result,
     },
 };
@@ -55,15 +58,25 @@ impl MainRepository {
             .map_err(Error::GradeDetailsFetchError)?)
     }
 
+    // TODO: we may need more modularization when it comes to messages repo
     #[allow(unused)]
-    pub async fn messages_recieved(
+    pub async fn recieved_messages(
         &self,
         page: Page,
         limit: Limit,
     ) -> Result<RecievedMessagePreviews> {
         Ok(self
             .messages
-            .recieved(page, limit)
+            .recieved_messages(page, limit)
+            .await
+            .map_err(Error::MessagesFetchError)?)
+    }
+
+    #[allow(unused)]
+    pub async fn recieved_message(&self, message_id: MessageId) -> Result<RecievedMessage> {
+        Ok(self
+            .messages
+            .recieved_message(message_id)
             .await
             .map_err(Error::MessagesFetchError)?)
     }

@@ -5023,6 +5023,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "serde_with",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",

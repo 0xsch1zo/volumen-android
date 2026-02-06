@@ -17,9 +17,7 @@ use crate::{
     net::{
         self,
         synergia_api::{
-            account_selector::{
-                AccountSelector, AccountSelectorConstructionError, AccountSelectorError,
-            },
+            account_selector::{AccountSelector, AccountSelectorConstructionError},
             api::{
                 auth::{
                     AuthCode, LoginAttrKinds, LoginAttrs, LoginRequest, PortalTokenPair,
@@ -37,7 +35,7 @@ use crate::{
     },
     repositories::{
         grades::{Categories, Comment, CommentId, ShallowGrades},
-        messages::{Limit, Page, RecievedMessagePreviews},
+        messages::{Limit, MessageId, Page, RecievedMessage, RecievedMessagePreviews},
         subjects::Subjects,
         users::Users,
     },
@@ -371,17 +369,19 @@ impl GradesEndpoints {
 #[derive(Debug)]
 enum MessagesEndpoints {
     Authorization,
-    Recieved { page: usize, limit: usize },
-    Sent { page: usize, limit: usize },
+    RecievedMessages { page: usize, limit: usize },
+    RecievedMessage { id: usize },
+    SentMessages { page: usize, limit: usize },
 }
 
 impl MessagesEndpoints {
     fn url(&self) -> Url {
         let endpoint = match self {
-            MessagesEndpoints::Recieved { page, limit } => {
+            MessagesEndpoints::RecievedMessages { page, limit } => {
                 &format!("/api/inbox/messages?page={page}&limit={limit}")
             }
-            MessagesEndpoints::Sent { page, limit } => {
+            MessagesEndpoints::RecievedMessage { id } => &format!("/api/inbox/messages/{id}"),
+            MessagesEndpoints::SentMessages { page, limit } => {
                 &format!("/api/outbox/messages?page={page}&limit={limit}")
             }
             MessagesEndpoints::Authorization => return SYNERGIA_URL.join("/wiadomosci3").unwrap(),
@@ -510,16 +510,28 @@ impl<'a> MessagesManager<'a> {
         Ok(resource)
     }
 
-    pub async fn fetch_recieved(
+    pub async fn fetch_recieved_messages(
         &self,
         page: Page,
         limit: Limit,
     ) -> Result<RecievedMessagePreviews> {
         Ok(self
             .fetch_message_endpoint::<messages::RecievedMessagePreviews>(
-                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::Recieved {
+                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::RecievedMessages {
                     page: page.into_inner(),
                     limit: limit.into_inner(),
+                }),
+            )
+            .await?
+            .try_into()
+            .map_err(ModelConversionError::from)?)
+    }
+
+    pub async fn fetch_recieved_message(&self, message_id: MessageId) -> Result<RecievedMessage> {
+        Ok(self
+            .fetch_message_endpoint::<messages::RecievedMessageResponse>(
+                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::RecievedMessage {
+                    id: message_id.into_inner(),
                 }),
             )
             .await?

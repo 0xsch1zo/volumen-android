@@ -13,7 +13,9 @@ use crate::{
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("failed to fetch recieved messages")]
-    RecievedMessageFetchError(#[from] CacheComputeError),
+    RecievedMessagesFetchError(#[source] CacheComputeError),
+    #[error("failed to fetch recieved message")]
+    RecievedMessageFetchError(#[source] CacheComputeError),
 }
 
 pub struct Page(usize);
@@ -40,12 +42,16 @@ impl Limit {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MessageId(usize);
 
 impl MessageId {
     pub fn new(_0: usize) -> Self {
         Self(_0)
+    }
+
+    pub fn into_inner(self) -> usize {
+        self.0
     }
 }
 
@@ -66,29 +72,45 @@ pub struct RecievedMessagePreviews {
     pub total: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct AttachmentId(usize);
 
-struct AttachmentReference {
-    id: AttachmentId,
-    filename: String,
+impl AttachmentId {
+    pub fn new(_0: usize) -> Self {
+        Self(_0)
+    }
 }
 
+#[derive(Debug, Clone)]
+pub struct AttachmentReference {
+    pub id: AttachmentId,
+    pub filename: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct RecievedMessage {
-    message_id: MessageId,
-    sender_name: String,
-    topic: String,
-    message: String,
-    send_date: String,
-    read_date: Option<String>,
-    no_reply: bool,
-    is_archived: bool,
-    attachments: Vec<AttachmentReference>,
+    pub message_id: MessageId,
+    pub sender_name: String,
+    pub topic: String,
+    pub message: String,
+    pub send_date: String,
+    pub read_date: Option<String>,
+    pub no_reply: bool,
+    pub is_archived: bool,
+    pub attachments: Vec<AttachmentReference>,
+}
+
+impl Keyable<MessageId> for RecievedMessage {
+    fn key(&self) -> MessageId {
+        self.message_id
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct MessagesRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
     recieved_preview_cache: SingleEntryCache<RecievedMessagePreviews>,
+    recieved_cache: AutoKeyedCache<MessageId, RecievedMessage>,
 }
 
 impl MessagesRepository {
@@ -96,10 +118,11 @@ impl MessagesRepository {
         Self {
             synergia_api,
             recieved_preview_cache: SingleEntryCache::new(),
+            recieved_cache: AutoKeyedCache::new(),
         }
     }
 
-    pub async fn recieved(
+    pub async fn recieved_messages(
         &self,
         page: Page,
         limit: Limit,
@@ -108,7 +131,19 @@ impl MessagesRepository {
             .try_get_with(async {
                 self.synergia_api
                     .messages()
-                    .fetch_recieved(page, limit)
+                    .fetch_recieved_messages(page, limit)
+                    .await
+            })
+            .await
+            .map_err(Error::RecievedMessageFetchError)
+    }
+
+    pub async fn recieved_message(&self, message_id: MessageId) -> Result<RecievedMessage, Error> {
+        self.recieved_cache
+            .try_get_with(&message_id, async {
+                self.synergia_api
+                    .messages()
+                    .fetch_recieved_message(message_id)
                     .await
             })
             .await

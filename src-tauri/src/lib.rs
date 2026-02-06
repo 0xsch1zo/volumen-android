@@ -5,7 +5,7 @@ use tauri::{async_runtime::Mutex, Manager, State};
 
 use crate::{
     error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt, StatefulResultExt},
-    repositories::messages::{Limit, Page},
+    repositories::messages::{Limit, MessageId, Page},
     state::{
         AccountSelectionState, AppStates, AppStatesInner, AuthenticatedState, UnauthenticatedState,
     },
@@ -80,13 +80,13 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .into_app_result()
         .log_on_err()?;
 
-    let messages = state
+    let message = state
         .main_repository
-        .messages_recieved(Page::new(1), Limit::new(10))
+        .recieved_message(MessageId::new(3304905))
         .await
         .into_app_result()
         .log_on_err()?;
-    Ok(format!("{messages:?}"))
+    Ok(format!("{message:?}"))
 }
 
 // TODO: handle logs better for release
