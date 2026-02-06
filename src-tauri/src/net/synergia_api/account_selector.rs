@@ -6,6 +6,7 @@ use crate::{
     net::{
         self,
         synergia_api::{
+            self,
             api::auth::{PortalTokenPair, SynergiaAccounts},
             AuthenticatedState, StatefulError, PORTAL_URL,
         },
@@ -15,14 +16,18 @@ use crate::{
 };
 
 #[derive(Error, Debug)]
-pub enum AccountSelectorError {
-    #[error("reqwest error")]
-    ReqwestError(#[from] reqwest::Error),
-    #[error("reqwest error")]
-    ReqwestMiddlewareError(#[from] reqwest_middleware::Error),
-}
+#[error("failed to construct account selector")]
+pub struct AccountSelectorConstructionError(#[source] reqwest::Error);
 
-type Result<T, E = AccountSelectorError> = std::result::Result<T, E>;
+#[derive(Error, Debug)]
+pub enum AccountSelectorError {
+    #[error("failed to initialize the authenticated synergia api")]
+    AuthedSynergiaApiInit(#[source] synergia_api::Error),
+    #[error("failed to send request grabbing account list")]
+    AccountListRequestSendError(#[source] reqwest_middleware::Error),
+    #[error("failed to deserialize synergia accounts")]
+    SynergiaAccountsDeserializationError(#[from] reqwest::Error),
+}
 
 #[derive(Debug)]
 pub struct AccountSelector {
@@ -31,10 +36,16 @@ pub struct AccountSelector {
 }
 
 impl AccountSelector {
-    pub fn try_new(portal_creds: PortalTokenPair) -> Result<Self> {
-        let client = ClientBuilder::new(net::default_client_options().build()?)
-            .with(ErrorStatusMiddleware)
-            .build();
+    pub fn try_new(
+        portal_creds: PortalTokenPair,
+    ) -> Result<Self, AccountSelectorConstructionError> {
+        let client = ClientBuilder::new(
+            net::default_client_options()
+                .build()
+                .map_err(AccountSelectorConstructionError)?,
+        )
+        .with(ErrorStatusMiddleware)
+        .build();
         Ok(Self {
             portal_creds,
             client,
@@ -44,16 +55,17 @@ impl AccountSelector {
     pub async fn select(
         self,
         id: SynergiaUserId,
-    ) -> Result<SynergiaApi<AuthenticatedState>, StatefulError<Self>> {
+    ) -> Result<SynergiaApi<AuthenticatedState>, StatefulError<Self, AccountSelectorError>> {
         SynergiaApi::<AuthenticatedState>::init(id.into(), self.portal_creds)
             .await
             .map_err_state(|(_, portal_creds)| Self {
                 portal_creds,
                 client: self.client,
             })
+            .map_stateful_err(AccountSelectorError::AuthedSynergiaApiInit)
     }
 
-    pub async fn accounts(&self) -> Result<ModelSynergiaAccounts> {
+    pub async fn accounts(&self) -> Result<ModelSynergiaAccounts, AccountSelectorError> {
         const SYNERGIA_ACCOUNT_ENDPOINT: &str = "/api/v3/SynergiaAccounts";
         let portal_access_token = &self.portal_creds.access_token;
 
@@ -66,9 +78,11 @@ impl AccountSelector {
             .get(PORTAL_URL.join(SYNERGIA_ACCOUNT_ENDPOINT).unwrap())
             .bearer_auth(portal_access_token.as_inner())
             .send()
-            .await?
+            .await
+            .map_err(AccountSelectorError::AccountListRequestSendError)?
             .json::<SynergiaAccounts>()
-            .await?;
+            .await
+            .map_err(AccountSelectorError::SynergiaAccountsDeserializationError)?;
         Ok(accounts.into())
     }
 }

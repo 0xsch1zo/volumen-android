@@ -17,7 +17,9 @@ use crate::{
     net::{
         self,
         synergia_api::{
-            account_selector::{AccountSelector, AccountSelectorError},
+            account_selector::{
+                AccountSelector, AccountSelectorConstructionError, AccountSelectorError,
+            },
             api::{
                 auth::{
                     AuthCode, LoginAttrKinds, LoginAttrs, LoginRequest, PortalTokenPair,
@@ -78,7 +80,7 @@ pub enum Error {
     #[error("invalid header value")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
     #[error("account selector construction error")]
-    AccountSelectorConstructionError(#[source] AccountSelectorError),
+    AccountSelectorConstructionError(#[source] AccountSelectorConstructionError),
     #[error("main authenticator init error")]
     MainAuthenticatorInitError(#[source] MainAuthenticatorError),
     #[error("unauthenticated client construction failure")]

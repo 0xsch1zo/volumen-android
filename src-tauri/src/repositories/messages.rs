@@ -68,7 +68,7 @@ pub struct RecievedMessagePreviews {
 
 pub struct AttachmentId(usize);
 
-struct Attachment {
+struct AttachmentReference {
     id: AttachmentId,
     filename: String,
 }
@@ -82,11 +82,11 @@ pub struct RecievedMessage {
     read_date: Option<String>,
     no_reply: bool,
     is_archived: bool,
-    recievers_count: usize,
+    attachments: Vec<AttachmentReference>,
 }
 
 #[derive(Debug, Clone)]
-struct MessagesRepository {
+pub struct MessagesRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
     recieved_preview_cache: SingleEntryCache<RecievedMessagePreviews>,
 }

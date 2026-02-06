@@ -1,10 +1,19 @@
 use serde::Serialize;
+use thiserror::Error;
 
 use crate::{
     error::StatefulResultExt,
-    net::synergia_api::account_selector::AccountSelector,
+    net::synergia_api::account_selector::{AccountSelector, AccountSelectorError},
     repositories::{main::MainRepository, Result, StatefulError},
 };
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("failed to select account")]
+    AccountSelectError(#[source] AccountSelectorError),
+    #[error("failed to fetch available accounts")]
+    AccountsFetchError(#[source] AccountSelectorError),
+}
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(transparent)]
@@ -42,7 +51,11 @@ impl AccountSelectionRepository {
     }
 
     pub async fn accounts(&self) -> Result<SynergiaAccounts> {
-        Ok(self.account_selector.accounts().await?)
+        Ok(self
+            .account_selector
+            .accounts()
+            .await
+            .map_err(Error::AccountsFetchError)?)
     }
 
     pub async fn select(
@@ -54,6 +67,7 @@ impl AccountSelectionRepository {
             .await
             .map(MainRepository::new)
             .map_err_state(AccountSelectionRepository::new)
+            .map_stateful_err(Error::AccountSelectError)
             .map_stateful_err(Into::into)
     }
 }

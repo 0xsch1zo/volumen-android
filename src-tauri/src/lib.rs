@@ -19,7 +19,7 @@ mod repositories;
 mod state;
 mod sync;
 
-// ENABLE COMPRESSION ON RELEASE
+// TODO: ENABLE COMPRESSION ON RELEASE
 
 #[cfg(debug_assertions)]
 const fn is_debug() -> bool {

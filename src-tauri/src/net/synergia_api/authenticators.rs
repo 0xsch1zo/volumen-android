@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use cookie::Cookie;
 use log::{debug, error};
 use reqwest::{redirect::Policy, Request, Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
@@ -12,12 +11,12 @@ use crate::{
     net::{
         self,
         synergia_api::{
-            api::auth::{PortalTokenPair, SynergiaToken, SynergiaUserId},
+            api::auth::{PortalTokenPair, SynergiaUserId},
             credential_manager::{
                 CredentialManager, CredentialManagerError, Credentials,
                 SynergiaCredentialRefreshError,
             },
-            AuthenticatedSynergiaEndpoints, MessagesEndpoints, MESSAGES_URL, SYNERGIA_URL,
+            AuthenticatedSynergiaEndpoints, MessagesEndpoints, MESSAGES_URL,
         },
         RequestCookieExt, RequestCookieExtError,
     },
