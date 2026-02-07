@@ -24,7 +24,7 @@ use crate::{
                     SynergiaUserId,
                 },
                 grades::{CategoriesResponse, CommentResponse, GradesResponse},
-                messages::{self, MessageModelConversionError},
+                messages::{received, sent, MessageModelConversionError},
                 subjects::SubjectsResponse,
                 users::UsersResponse,
             },
@@ -35,7 +35,11 @@ use crate::{
     },
     repositories::{
         grades::{Categories, Comment, CommentId, ShallowGrades},
-        messages::{Limit, MessageId, Page, RecievedMessage, RecievedMessagePreviews},
+        messages::{
+            received::{ReceivedMessage, ReceivedMessagePreviews},
+            sent::{SentMessage, SentMessagePreviews},
+            Limit, MessageId, Page,
+        },
         subjects::Subjects,
         users::Users,
     },
@@ -369,18 +373,20 @@ impl GradesEndpoints {
 #[derive(Debug)]
 enum MessagesEndpoints {
     Authorization,
-    RecievedMessages { page: usize, limit: usize },
-    RecievedMessage { id: usize },
+    ReceivedMessage { id: usize },
+    ReceivedMessages { page: usize, limit: usize },
+    SentMessage { id: usize },
     SentMessages { page: usize, limit: usize },
 }
 
 impl MessagesEndpoints {
     fn url(&self) -> Url {
         let endpoint = match self {
-            MessagesEndpoints::RecievedMessages { page, limit } => {
+            MessagesEndpoints::ReceivedMessage { id } => &format!("/api/inbox/messages/{id}"),
+            MessagesEndpoints::ReceivedMessages { page, limit } => {
                 &format!("/api/inbox/messages?page={page}&limit={limit}")
             }
-            MessagesEndpoints::RecievedMessage { id } => &format!("/api/inbox/messages/{id}"),
+            MessagesEndpoints::SentMessage { id } => &format!("/api/outbox/messages/{id}"),
             MessagesEndpoints::SentMessages { page, limit } => {
                 &format!("/api/outbox/messages?page={page}&limit={limit}")
             }
@@ -510,14 +516,29 @@ impl<'a> MessagesManager<'a> {
         Ok(resource)
     }
 
-    pub async fn fetch_recieved_messages(
-        &self,
-        page: Page,
-        limit: Limit,
-    ) -> Result<RecievedMessagePreviews> {
+    pub fn received(&self) -> ReceivedMessagesManager {
+        ReceivedMessagesManager::new(self)
+    }
+
+    pub fn sent(&self) -> SentMessagesManager {
+        SentMessagesManager::new(self)
+    }
+}
+
+pub struct ReceivedMessagesManager<'a> {
+    messages_manager: &'a MessagesManager<'a>,
+}
+
+impl<'a> ReceivedMessagesManager<'a> {
+    fn new(messages_manager: &'a MessagesManager<'a>) -> Self {
+        Self { messages_manager }
+    }
+
+    pub async fn fetch_list(&self, page: Page, limit: Limit) -> Result<ReceivedMessagePreviews> {
         Ok(self
-            .fetch_message_endpoint::<messages::RecievedMessagePreviews>(
-                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::RecievedMessages {
+            .messages_manager
+            .fetch_message_endpoint::<received::ReceivedMessagePreviews>(
+                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::ReceivedMessages {
                     page: page.into_inner(),
                     limit: limit.into_inner(),
                 }),
@@ -527,10 +548,11 @@ impl<'a> MessagesManager<'a> {
             .map_err(ModelConversionError::from)?)
     }
 
-    pub async fn fetch_recieved_message(&self, message_id: MessageId) -> Result<RecievedMessage> {
+    pub async fn fetch_message(&self, message_id: MessageId) -> Result<ReceivedMessage> {
         Ok(self
-            .fetch_message_endpoint::<messages::RecievedMessageResponse>(
-                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::RecievedMessage {
+            .messages_manager
+            .fetch_message_endpoint::<received::ReceivedMessageResponse>(
+                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::ReceivedMessage {
                     id: message_id.into_inner(),
                 }),
             )
@@ -538,13 +560,41 @@ impl<'a> MessagesManager<'a> {
             .try_into()
             .map_err(ModelConversionError::from)?)
     }
+}
 
-    /*pub async fn fetch_sent(&self) -> Result<Vec<Message>> {
+pub struct SentMessagesManager<'a> {
+    messages_manager: &'a MessagesManager<'a>,
+}
+
+impl<'a> SentMessagesManager<'a> {
+    fn new(messages_manager: &'a MessagesManager) -> Self {
+        Self { messages_manager }
+    }
+
+    pub async fn fetch_list(&self, page: Page, limit: Limit) -> Result<SentMessagePreviews> {
         Ok(self
-            .synergia_api
-            .fetch_synergia_endpoint::<Vec<Message>>(AuthenticatedSynergiaEndpoints::Messages(
-                MessagesEndpoints::Sent { page: 1, limit: 10 },
-            ))
-            .await?)
-    }*/
+            .messages_manager
+            .fetch_message_endpoint::<sent::SentMessagePreviews>(
+                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::SentMessages {
+                    page: page.into_inner(),
+                    limit: limit.into_inner(),
+                }),
+            )
+            .await?
+            .try_into()
+            .map_err(ModelConversionError::from)?)
+    }
+
+    pub async fn fetch_message(&self, message_id: MessageId) -> Result<SentMessage> {
+        Ok(self
+            .messages_manager
+            .fetch_message_endpoint::<sent::SentMessageResponse>(
+                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::SentMessage {
+                    id: message_id.into_inner(),
+                }),
+            )
+            .await?
+            .try_into()
+            .map_err(ModelConversionError::from)?)
+    }
 }
