@@ -223,7 +223,7 @@ impl GradesRepository {
         }
     }
 
-    pub async fn grades(&self) -> Result<Grades, Error> {
+    pub async fn list(&self) -> Result<Grades, Error> {
         let shallow_grades = self
             .cache
             .try_get_with(async {

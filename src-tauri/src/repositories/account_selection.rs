@@ -2,9 +2,9 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
-    error::StatefulResultExt,
+    error::{StatefulError, StatefulResultExt},
     net::synergia_api::account_selector::{AccountSelector, AccountSelectorError},
-    repositories::{main::MainRepository, Result, StatefulError},
+    repositories::main::MainRepository,
 };
 
 #[derive(Error, Debug)]
@@ -50,7 +50,7 @@ impl AccountSelectionRepository {
         Self { account_selector }
     }
 
-    pub async fn accounts(&self) -> Result<SynergiaAccounts> {
+    pub async fn accounts(&self) -> Result<SynergiaAccounts, Error> {
         Ok(self
             .account_selector
             .accounts()
@@ -61,13 +61,12 @@ impl AccountSelectionRepository {
     pub async fn select(
         self,
         user_id: SynergiaUserId,
-    ) -> Result<MainRepository, StatefulError<Self>> {
+    ) -> Result<MainRepository, StatefulError<Self, Error>> {
         self.account_selector
             .select(user_id)
             .await
             .map(MainRepository::new)
             .map_err_state(AccountSelectionRepository::new)
             .map_stateful_err(Error::AccountSelectError)
-            .map_stateful_err(Into::into)
     }
 }

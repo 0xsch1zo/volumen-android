@@ -1,22 +1,12 @@
 use std::sync::Arc;
 
-use thiserror::Error;
-
 use crate::{
-    cache::{AutoKeyedCache, CacheComputeError, Keyable, SingleEntryCache},
-    net::{
-        synergia_api::{self, AuthenticatedState},
-        SynergiaApi,
-    },
+    net::{synergia_api::AuthenticatedState, SynergiaApi},
+    repositories::messages::{received::ReceivedMessageRepository, sent::SentMessageRepository},
 };
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("failed to fetch recieved messages")]
-    RecievedMessagesFetchError(#[source] CacheComputeError),
-    #[error("failed to fetch recieved message")]
-    RecievedMessageFetchError(#[source] CacheComputeError),
-}
+pub mod received;
+pub mod sent;
 
 pub struct Page(usize);
 
@@ -55,23 +45,6 @@ impl MessageId {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct RecievedMessagePreview {
-    pub message_id: MessageId,
-    pub sender_name: String,
-    pub topic: String,
-    pub fragment: String,
-    pub send_date: String,
-    pub read_date: Option<String>,
-    pub has_file_attachment: bool,
-}
-
-#[derive(Clone, Debug)]
-pub struct RecievedMessagePreviews {
-    pub messages: Vec<RecievedMessagePreview>,
-    pub total: usize,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct AttachmentId(usize);
 
@@ -88,65 +61,40 @@ pub struct AttachmentReference {
 }
 
 #[derive(Debug, Clone)]
-pub struct RecievedMessage {
-    pub message_id: MessageId,
-    pub sender_name: String,
-    pub topic: String,
-    pub message: String,
-    pub send_date: String,
-    pub read_date: Option<String>,
-    pub no_reply: bool,
-    pub is_archived: bool,
-    pub attachments: Vec<AttachmentReference>,
-}
+pub struct ReceiverId(usize);
 
-impl Keyable<MessageId> for RecievedMessage {
-    fn key(&self) -> MessageId {
-        self.message_id
+impl ReceiverId {
+    pub fn new(_0: usize) -> Self {
+        Self(_0)
     }
 }
 
 #[derive(Debug, Clone)]
+pub struct Receiver {
+    pub receiver_id: ReceiverId,
+    pub name: String,
+    pub read_date: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct MessagesRepository {
-    synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
-    recieved_preview_cache: SingleEntryCache<RecievedMessagePreviews>,
-    recieved_cache: AutoKeyedCache<MessageId, RecievedMessage>,
+    recieved: ReceivedMessageRepository,
+    sent: SentMessageRepository,
 }
 
 impl MessagesRepository {
     pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
         Self {
-            synergia_api,
-            recieved_preview_cache: SingleEntryCache::new(),
-            recieved_cache: AutoKeyedCache::new(),
+            recieved: ReceivedMessageRepository::new(Arc::clone(&synergia_api)),
+            sent: SentMessageRepository::new(Arc::clone(&synergia_api)),
         }
     }
 
-    pub async fn recieved_messages(
-        &self,
-        page: Page,
-        limit: Limit,
-    ) -> Result<RecievedMessagePreviews, Error> {
-        self.recieved_preview_cache
-            .try_get_with(async {
-                self.synergia_api
-                    .messages()
-                    .fetch_recieved_messages(page, limit)
-                    .await
-            })
-            .await
-            .map_err(Error::RecievedMessageFetchError)
+    pub fn received(&self) -> &ReceivedMessageRepository {
+        &self.recieved
     }
 
-    pub async fn recieved_message(&self, message_id: MessageId) -> Result<RecievedMessage, Error> {
-        self.recieved_cache
-            .try_get_with(&message_id, async {
-                self.synergia_api
-                    .messages()
-                    .fetch_recieved_message(message_id)
-                    .await
-            })
-            .await
-            .map_err(Error::RecievedMessageFetchError)
+    pub fn sent(&self) -> &SentMessageRepository {
+        &self.sent
     }
 }

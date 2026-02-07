@@ -82,7 +82,9 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
 
     let message = state
         .main_repository
-        .recieved_message(MessageId::new(3304905))
+        .messages()
+        .sent()
+        .message(MessageId::new(2133075))
         .await
         .into_app_result()
         .log_on_err()?;

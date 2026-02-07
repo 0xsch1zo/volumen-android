@@ -8,9 +8,12 @@ use crate::repositories;
 
 #[derive(Error, Debug)]
 pub enum ApplicationError {
-    // shouldn't be handled here really
-    #[error("repository error")]
-    RepoError(#[from] repositories::Error),
+    #[error("account selection repository error")]
+    AccountSelectionRepoError(#[from] repositories::account_selection::Error),
+    #[error("login repository error")]
+    LoginRepoError(#[from] repositories::login::Error),
+    #[error("sent messages repository error")]
+    SentMessagesRepoError(#[from] repositories::messages::sent::Error),
     #[error("wanted to aquire wrong state: {0}")]
     WrongState(String),
 }

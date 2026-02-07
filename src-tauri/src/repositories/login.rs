@@ -1,12 +1,12 @@
 use thiserror::Error;
 
 use crate::{
-    error::StatefulResultExt,
+    error::{StatefulError, StatefulResultExt},
     net::{
         synergia_api::{self, UnauthenticatedState},
         SynergiaApi,
     },
-    repositories::{account_selection::AccountSelectionRepository, Result, StatefulError},
+    repositories::account_selection::AccountSelectionRepository,
 };
 
 #[derive(Error, Debug)]
@@ -16,13 +16,14 @@ pub enum Error {
     #[error("login error")]
     LoginError(#[source] synergia_api::Error),
 }
+
 #[derive(Debug)]
 pub struct LoginRepository {
     synergia_api: SynergiaApi<UnauthenticatedState>,
 }
 
 impl LoginRepository {
-    pub fn try_new() -> Result<Self> {
+    pub fn try_new() -> Result<Self, Error> {
         Ok(Self {
             synergia_api: SynergiaApi::try_new()
                 .map_err(Error::UnauthedSynergiaConstructionError)?,
@@ -33,7 +34,7 @@ impl LoginRepository {
         self,
         email: String,
         password: String,
-    ) -> Result<AccountSelectionRepository, StatefulError<Self>> {
+    ) -> Result<AccountSelectionRepository, StatefulError<Self, Error>> {
         self.synergia_api
             .login(email, password)
             .await
