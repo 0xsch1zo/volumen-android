@@ -4,8 +4,9 @@ use thiserror::Error;
 
 use crate::{
     cache::{AutoKeyedCache, CacheComputeError, Keyable, SingleEntryCache},
-    net::{synergia_api::AuthenticatedState, SynergiaApi},
-    repositories::messages::{AttachmentReference, Limit, MessageId, Page, Receiver},
+    repositories::messages::{
+        AttachmentReference, Limit, MessageId, MessagesSource, Page, Receiver,
+    },
 };
 
 #[derive(Error, Debug)]
@@ -54,26 +55,50 @@ impl Keyable<MessageId> for ReceivedMessage {
 }
 
 #[derive(Debug, Clone)]
-pub struct ReceivedMessageRepository {
-    synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
+pub struct ReceivedMessagesRepository {
     preview_cache: SingleEntryCache<ReceivedMessagePreviews>,
     message_cache: AutoKeyedCache<MessageId, ReceivedMessage>,
 }
 
-impl ReceivedMessageRepository {
-    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
+impl ReceivedMessagesRepository {
+    pub fn new() -> Self {
         Self {
-            synergia_api,
             preview_cache: SingleEntryCache::new(),
             message_cache: AutoKeyedCache::new(),
+        }
+    }
+
+    pub(super) fn delegate<'a>(
+        &'a self,
+        messages_source: impl MessagesSource + 'a,
+    ) -> ReceivedMessagesDelegate<'a> {
+        ReceivedMessagesDelegate::new(messages_source, &self.preview_cache, &self.message_cache)
+    }
+}
+
+pub struct ReceivedMessagesDelegate<'a> {
+    messages_source: Arc<dyn MessagesSource + 'a>,
+    preview_cache: &'a SingleEntryCache<ReceivedMessagePreviews>,
+    message_cache: &'a AutoKeyedCache<MessageId, ReceivedMessage>,
+}
+
+impl<'a> ReceivedMessagesDelegate<'a> {
+    fn new(
+        messages_source: impl MessagesSource + 'a,
+        preview_cache: &'a SingleEntryCache<ReceivedMessagePreviews>,
+        message_cache: &'a AutoKeyedCache<MessageId, ReceivedMessage>,
+    ) -> Self {
+        Self {
+            messages_source: Arc::new(messages_source),
+            preview_cache,
+            message_cache,
         }
     }
 
     pub async fn list(&self, page: Page, limit: Limit) -> Result<ReceivedMessagePreviews, Error> {
         self.preview_cache
             .try_get_with(async {
-                self.synergia_api
-                    .messages()
+                self.messages_source
                     .received()
                     .fetch_list(page, limit)
                     .await
@@ -85,8 +110,7 @@ impl ReceivedMessageRepository {
     pub async fn message(&self, message_id: MessageId) -> Result<ReceivedMessage, Error> {
         self.message_cache
             .try_get_with(&message_id, async {
-                self.synergia_api
-                    .messages()
+                self.messages_source
                     .received()
                     .fetch_message(message_id)
                     .await

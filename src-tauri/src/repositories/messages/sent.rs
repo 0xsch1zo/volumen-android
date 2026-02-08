@@ -5,7 +5,9 @@ use thiserror::Error;
 use crate::{
     cache::{AutoKeyedCache, CacheComputeError, Keyable, SingleEntryCache},
     net::{synergia_api::AuthenticatedState, SynergiaApi},
-    repositories::messages::{AttachmentReference, Limit, MessageId, Page, Receiver},
+    repositories::messages::{
+        AttachmentReference, Limit, MessageId, MessagesSource, Page, Receiver,
+    },
 };
 
 #[derive(Error, Debug)]
@@ -53,30 +55,49 @@ impl Keyable<MessageId> for SentMessage {
 }
 
 #[derive(Debug, Clone)]
-pub struct SentMessageRepository {
-    synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
+pub struct SentMessagesRepository {
     preview_cache: SingleEntryCache<SentMessagePreviews>,
     message_cache: AutoKeyedCache<MessageId, SentMessage>,
 }
 
-impl SentMessageRepository {
-    pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
+impl SentMessagesRepository {
+    pub fn new() -> Self {
         Self {
-            synergia_api,
             preview_cache: SingleEntryCache::new(),
             message_cache: AutoKeyedCache::new(),
         }
     }
 
+    pub(super) fn delegate<'a>(
+        &'a self,
+        messages_source: impl MessagesSource + 'a,
+    ) -> SentMessagesDelegate<'a> {
+        SentMessagesDelegate::new(messages_source, &self.preview_cache, &self.message_cache)
+    }
+}
+
+pub struct SentMessagesDelegate<'a> {
+    messages_source: Arc<dyn MessagesSource + 'a>,
+    preview_cache: &'a SingleEntryCache<SentMessagePreviews>,
+    message_cache: &'a AutoKeyedCache<MessageId, SentMessage>,
+}
+
+impl<'a> SentMessagesDelegate<'a> {
+    fn new(
+        messages_source: impl MessagesSource + 'a,
+        preview_cache: &'a SingleEntryCache<SentMessagePreviews>,
+        message_cache: &'a AutoKeyedCache<MessageId, SentMessage>,
+    ) -> Self {
+        Self {
+            messages_source: Arc::new(messages_source),
+            preview_cache,
+            message_cache,
+        }
+    }
+
     pub async fn list(&self, page: Page, limit: Limit) -> Result<SentMessagePreviews, Error> {
         self.preview_cache
-            .try_get_with(async {
-                self.synergia_api
-                    .messages()
-                    .sent()
-                    .fetch_list(page, limit)
-                    .await
-            })
+            .try_get_with(async { self.messages_source.sent().fetch_list(page, limit).await })
             .await
             .map_err(Error::ListGetError)
     }
@@ -84,11 +105,7 @@ impl SentMessageRepository {
     pub async fn message(&self, message_id: MessageId) -> Result<SentMessage, Error> {
         self.message_cache
             .try_get_with(&message_id, async {
-                self.synergia_api
-                    .messages()
-                    .sent()
-                    .fetch_message(message_id)
-                    .await
+                self.messages_source.sent().fetch_message(message_id).await
             })
             .await
             .map_err(Error::MessageGetError)

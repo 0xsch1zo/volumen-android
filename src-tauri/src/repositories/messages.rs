@@ -1,8 +1,17 @@
 use std::sync::Arc;
 
 use crate::{
-    net::{synergia_api::AuthenticatedState, SynergiaApi},
-    repositories::messages::{received::ReceivedMessageRepository, sent::SentMessageRepository},
+    net::{
+        synergia_api::{
+            AuthenticatedState, MessagesArchiveManager, MessagesManager, ReceivedMessagesManager,
+            SentMessagesManager,
+        },
+        SynergiaApi,
+    },
+    repositories::messages::{
+        received::{ReceivedMessagesDelegate, ReceivedMessagesRepository},
+        sent::{SentMessagesDelegate, SentMessagesRepository},
+    },
 };
 
 pub mod received;
@@ -76,25 +85,85 @@ pub struct Receiver {
     pub read_date: String,
 }
 
+trait MessagesSource: Send + Sync {
+    fn sent(&self) -> SentMessagesManager;
+    fn received(&self) -> ReceivedMessagesManager;
+}
+
+impl MessagesSource for MessagesManager<'_> {
+    fn sent(&self) -> SentMessagesManager {
+        self.sent()
+    }
+
+    fn received(&self) -> ReceivedMessagesManager {
+        self.received()
+    }
+}
+
+impl MessagesSource for MessagesArchiveManager<'_> {
+    fn sent(&self) -> SentMessagesManager {
+        self.sent()
+    }
+
+    fn received(&self) -> ReceivedMessagesManager {
+        self.received()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MessagesRepository {
-    recieved: ReceivedMessageRepository,
-    sent: SentMessageRepository,
+    synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
+    recieved: ReceivedMessagesRepository,
+    sent: SentMessagesRepository,
 }
 
 impl MessagesRepository {
     pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
         Self {
-            recieved: ReceivedMessageRepository::new(Arc::clone(&synergia_api)),
-            sent: SentMessageRepository::new(Arc::clone(&synergia_api)),
+            synergia_api,
+            recieved: ReceivedMessagesRepository::new(),
+            sent: SentMessagesRepository::new(),
         }
     }
 
-    pub fn received(&self) -> &ReceivedMessageRepository {
-        &self.recieved
+    pub fn received(&self) -> ReceivedMessagesDelegate {
+        self.recieved.delegate(self.synergia_api.messages())
     }
 
-    pub fn sent(&self) -> &SentMessageRepository {
-        &self.sent
+    pub fn sent(&self) -> SentMessagesDelegate {
+        self.sent.delegate(self.synergia_api.messages())
+    }
+
+    pub fn archive(&self) -> ArchiveDelegate {
+        ArchiveDelegate::new(self, self.synergia_api.messages())
+    }
+}
+
+pub struct ArchiveDelegate<'a> {
+    message_repository: &'a MessagesRepository,
+    messages_manager: MessagesManager<'a>,
+}
+
+impl<'a> ArchiveDelegate<'a> {
+    pub fn new(
+        message_repository: &'a MessagesRepository,
+        messages_manager: MessagesManager<'a>,
+    ) -> Self {
+        Self {
+            message_repository,
+            messages_manager,
+        }
+    }
+
+    pub fn received(&'a self) -> ReceivedMessagesDelegate<'a> {
+        self.message_repository
+            .recieved
+            .delegate(self.messages_manager.archive())
+    }
+
+    pub fn sent(&self) -> SentMessagesDelegate {
+        self.message_repository
+            .sent
+            .delegate(self.messages_manager.archive())
     }
 }

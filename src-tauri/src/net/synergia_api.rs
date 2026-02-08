@@ -373,24 +373,57 @@ impl GradesEndpoints {
 #[derive(Debug)]
 enum MessagesEndpoints {
     Authorization,
+    CurrentMessages(MessagesSourceEndpoints),
+    ArchivedMessages(MessagesSourceEndpoints),
+}
+
+impl MessagesEndpoints {
+    fn url(&self) -> Url {
+        match self {
+            MessagesEndpoints::Authorization => SYNERGIA_URL.join("/wiadomosci3").unwrap(),
+            MessagesEndpoints::CurrentMessages(endpoints) => endpoints.current_url(),
+            MessagesEndpoints::ArchivedMessages(endpoints) => endpoints.archive_url(),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum MessagesSourceEndpoints {
     ReceivedMessage { id: usize },
     ReceivedMessages { page: usize, limit: usize },
     SentMessage { id: usize },
     SentMessages { page: usize, limit: usize },
 }
 
-impl MessagesEndpoints {
-    fn url(&self) -> Url {
+impl MessagesSourceEndpoints {
+    fn current_url(&self) -> Url {
         let endpoint = match self {
-            MessagesEndpoints::ReceivedMessage { id } => &format!("/api/inbox/messages/{id}"),
-            MessagesEndpoints::ReceivedMessages { page, limit } => {
+            MessagesSourceEndpoints::ReceivedMessage { id } => &format!("/api/inbox/messages/{id}"),
+            MessagesSourceEndpoints::ReceivedMessages { page, limit } => {
                 &format!("/api/inbox/messages?page={page}&limit={limit}")
             }
-            MessagesEndpoints::SentMessage { id } => &format!("/api/outbox/messages/{id}"),
-            MessagesEndpoints::SentMessages { page, limit } => {
+            MessagesSourceEndpoints::SentMessage { id } => &format!("/api/outbox/messages/{id}"),
+            MessagesSourceEndpoints::SentMessages { page, limit } => {
                 &format!("/api/outbox/messages?page={page}&limit={limit}")
             }
-            MessagesEndpoints::Authorization => return SYNERGIA_URL.join("/wiadomosci3").unwrap(),
+        };
+        MESSAGES_URL.join(endpoint).unwrap()
+    }
+
+    fn archive_url(&self) -> Url {
+        let endpoint = match self {
+            MessagesSourceEndpoints::ReceivedMessage { id } => {
+                &format!("/api/archive/inbox/messages/{id}")
+            }
+            MessagesSourceEndpoints::ReceivedMessages { page, limit } => {
+                &format!("/api/archive/inbox/messages?page={page}&limit={limit}")
+            }
+            MessagesSourceEndpoints::SentMessage { id } => {
+                &format!("/api/archive/outbox/messages/{id}")
+            }
+            MessagesSourceEndpoints::SentMessages { page, limit } => {
+                &format!("/api/archive/outbox/messages?page={page}&limit={limit}")
+            }
         };
         MESSAGES_URL.join(endpoint).unwrap()
     }
@@ -488,6 +521,23 @@ impl<'a> GradesManager<'a> {
     }
 }
 
+enum MessagesSource {
+    Current,
+    Archive,
+}
+
+impl MessagesSource {
+    fn into_messages_endpoint(
+        &self,
+        source_endpoint: MessagesSourceEndpoints,
+    ) -> MessagesEndpoints {
+        match self {
+            Self::Current => MessagesEndpoints::CurrentMessages(source_endpoint),
+            Self::Archive => MessagesEndpoints::ArchivedMessages(source_endpoint),
+        }
+    }
+}
+
 pub struct MessagesManager<'a> {
     synergia_api: &'a SynergiaApi<AuthenticatedState>,
 }
@@ -517,31 +567,43 @@ impl<'a> MessagesManager<'a> {
     }
 
     pub fn received(&self) -> ReceivedMessagesManager {
-        ReceivedMessagesManager::new(self)
+        ReceivedMessagesManager::new(self, MessagesSource::Current)
     }
 
     pub fn sent(&self) -> SentMessagesManager {
-        SentMessagesManager::new(self)
+        SentMessagesManager::new(self, MessagesSource::Current)
+    }
+
+    pub fn archive(&self) -> MessagesArchiveManager {
+        MessagesArchiveManager::new(self)
     }
 }
 
 pub struct ReceivedMessagesManager<'a> {
     messages_manager: &'a MessagesManager<'a>,
+    source: MessagesSource,
 }
 
 impl<'a> ReceivedMessagesManager<'a> {
-    fn new(messages_manager: &'a MessagesManager<'a>) -> Self {
-        Self { messages_manager }
+    fn new(messages_manager: &'a MessagesManager<'a>, source: MessagesSource) -> Self {
+        Self {
+            messages_manager,
+            source,
+        }
     }
 
     pub async fn fetch_list(&self, page: Page, limit: Limit) -> Result<ReceivedMessagePreviews> {
+        let source_endopint = MessagesSourceEndpoints::ReceivedMessages {
+            page: page.into_inner(),
+            limit: limit.into_inner(),
+        };
+
         Ok(self
             .messages_manager
             .fetch_message_endpoint::<received::ReceivedMessagePreviews>(
-                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::ReceivedMessages {
-                    page: page.into_inner(),
-                    limit: limit.into_inner(),
-                }),
+                AuthenticatedSynergiaEndpoints::Messages(
+                    self.source.into_messages_endpoint(source_endopint),
+                ),
             )
             .await?
             .try_into()
@@ -549,12 +611,16 @@ impl<'a> ReceivedMessagesManager<'a> {
     }
 
     pub async fn fetch_message(&self, message_id: MessageId) -> Result<ReceivedMessage> {
+        let source_endpoint = MessagesSourceEndpoints::ReceivedMessage {
+            id: message_id.into_inner(),
+        };
+
         Ok(self
             .messages_manager
             .fetch_message_endpoint::<received::ReceivedMessageResponse>(
-                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::ReceivedMessage {
-                    id: message_id.into_inner(),
-                }),
+                AuthenticatedSynergiaEndpoints::Messages(
+                    self.source.into_messages_endpoint(source_endpoint),
+                ),
             )
             .await?
             .try_into()
@@ -564,21 +630,28 @@ impl<'a> ReceivedMessagesManager<'a> {
 
 pub struct SentMessagesManager<'a> {
     messages_manager: &'a MessagesManager<'a>,
+    source: MessagesSource,
 }
 
 impl<'a> SentMessagesManager<'a> {
-    fn new(messages_manager: &'a MessagesManager) -> Self {
-        Self { messages_manager }
+    fn new(messages_manager: &'a MessagesManager, source: MessagesSource) -> Self {
+        Self {
+            messages_manager,
+            source,
+        }
     }
 
     pub async fn fetch_list(&self, page: Page, limit: Limit) -> Result<SentMessagePreviews> {
+        let source_endpoint = MessagesSourceEndpoints::SentMessages {
+            page: page.into_inner(),
+            limit: limit.into_inner(),
+        };
         Ok(self
             .messages_manager
             .fetch_message_endpoint::<sent::SentMessagePreviews>(
-                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::SentMessages {
-                    page: page.into_inner(),
-                    limit: limit.into_inner(),
-                }),
+                AuthenticatedSynergiaEndpoints::Messages(
+                    self.source.into_messages_endpoint(source_endpoint),
+                ),
             )
             .await?
             .try_into()
@@ -586,15 +659,36 @@ impl<'a> SentMessagesManager<'a> {
     }
 
     pub async fn fetch_message(&self, message_id: MessageId) -> Result<SentMessage> {
+        let source_endpoint = MessagesSourceEndpoints::SentMessage {
+            id: message_id.into_inner(),
+        };
         Ok(self
             .messages_manager
             .fetch_message_endpoint::<sent::SentMessageResponse>(
-                AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::SentMessage {
-                    id: message_id.into_inner(),
-                }),
+                AuthenticatedSynergiaEndpoints::Messages(
+                    self.source.into_messages_endpoint(source_endpoint),
+                ),
             )
             .await?
             .try_into()
             .map_err(ModelConversionError::from)?)
+    }
+}
+
+pub struct MessagesArchiveManager<'a> {
+    messages_manager: &'a MessagesManager<'a>,
+}
+
+impl<'a> MessagesArchiveManager<'a> {
+    pub fn new(messages_manager: &'a MessagesManager<'a>) -> Self {
+        Self { messages_manager }
+    }
+
+    pub fn received(&self) -> ReceivedMessagesManager {
+        ReceivedMessagesManager::new(&self.messages_manager, MessagesSource::Archive)
+    }
+
+    pub fn sent(&self) -> SentMessagesManager {
+        SentMessagesManager::new(&self.messages_manager, MessagesSource::Archive)
     }
 }
