@@ -2,13 +2,13 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use thiserror::Error;
 
 use crate::{
-    error::StatefulResultExt,
+    error::{StatefulError, StatefulResultExt},
     net::{
         self,
         synergia_api::{
-            self,
             api::auth::{PortalTokenPair, SynergiaAccounts},
-            AuthenticatedState, StatefulError, PORTAL_URL,
+            states::{authenticated, AuthenticatedState},
+            PORTAL_URL,
         },
         ErrorStatusMiddleware, SynergiaApi,
     },
@@ -22,7 +22,7 @@ pub struct AccountSelectorConstructionError(#[source] reqwest::Error);
 #[derive(Error, Debug)]
 pub enum AccountSelectorError {
     #[error("failed to initialize the authenticated synergia api")]
-    AuthedSynergiaApiInit(#[source] synergia_api::Error),
+    AuthedSynergiaApiInit(#[source] authenticated::Error),
     #[error("failed to send request grabbing account list")]
     AccountListRequestSendError(#[source] reqwest_middleware::Error),
     #[error("failed to deserialize synergia accounts")]

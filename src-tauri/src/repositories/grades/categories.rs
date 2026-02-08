@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{
     cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{
-        synergia_api::{self, AuthenticatedState},
+        synergia_api::{AuthenticatedState, AuthenticatedSynergiaApiError},
         SynergiaApi,
     },
 };
@@ -67,7 +67,7 @@ impl CategoriesRepository {
         self.cache
             .try_bulk_insert_with(async {
                 let categories = self.synergia_api.grades().fetch_categories().await?;
-                Ok::<_, synergia_api::Error>(categories)
+                Ok::<_, AuthenticatedSynergiaApiError>(categories)
             })
             .await
             .map_err(|e| Error::CategoryFetchFailed(e))?;

@@ -1,0 +1,198 @@
+use std::{any, sync::Arc};
+
+use log::debug;
+use serde::de::DeserializeOwned;
+use thiserror::Error;
+use url::Url;
+
+use crate::{
+    error::{StatefulError, StatefulResultExt},
+    net::{
+        synergia_api::{
+            api::{
+                auth::{PortalTokenPair, SynergiaUserId},
+                messages::MessageModelConversionError,
+                subjects::SubjectsResponse,
+                users::UsersResponse,
+            },
+            authenticated::{grades::GradesManager, messages::MessagesManager},
+            authenticators::{MainAuthenticator, MainAuthenticatorError},
+            clients::{
+                AuthenticatedClientConstructionError, MainAuthenticatedClient, MessagesClient,
+                MessagesClientInitError,
+            },
+            states::authenticated::{grades::GradesEndpoints, messages::MessagesEndpoints},
+            SYNERGIA_URL,
+        },
+        SynergiaApi,
+    },
+    repositories::{subjects::Subjects, users::Users},
+    stateful_result,
+};
+
+mod grades;
+pub mod messages;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("failed to initialize api state")]
+    StateInitError(#[from] StateInitError),
+    #[error("model conversion error")]
+    ModelConversionError(#[from] ModelConversionError),
+    #[error("failed to send request to endpoint: {endpoint:?}")]
+    RequestError {
+        endpoint: AuthenticatedSynergiaEndpoints,
+        #[source]
+        source: reqwest_middleware::Error,
+    },
+    #[error(
+        "failed to deserialize response from endpoint: {endpoint:?},\n\twith type: {typename}"
+    )]
+    ResponseDeserializationError {
+        endpoint: AuthenticatedSynergiaEndpoints,
+        typename: String,
+        #[source]
+        source: reqwest::Error,
+    },
+}
+
+#[derive(Error, Debug)]
+pub enum StateInitError {
+    #[error("main authenticator init error")]
+    MainAuthenticatorInitError(#[from] MainAuthenticatorError),
+    #[error("main authenticated client construction failure")]
+    MainAuthenticatedClientConstructionError(#[from] AuthenticatedClientConstructionError),
+    #[error("messages client construction failure")]
+    MessagesClientInitError(#[from] MessagesClientInitError),
+}
+
+#[derive(Error, Debug)]
+pub enum ModelConversionError {
+    #[error("message model conversion error")]
+    MessageConvError(#[from] MessageModelConversionError),
+}
+
+#[derive(Debug)]
+pub struct AuthenticatedState {
+    main_client: MainAuthenticatedClient,
+    messages_client: MessagesClient, // we use a different client because auth works
+                                     // differently
+}
+
+impl AuthenticatedState {
+    async fn init(
+        user_id: SynergiaUserId,
+        portal_creds: PortalTokenPair,
+    ) -> Result<Self, StatefulError<(SynergiaUserId, PortalTokenPair), StateInitError>> {
+        let main_authenticator = stateful_result! { (user_id, portal_creds) =>
+            MainAuthenticator::init(user_id, portal_creds.clone())
+                    .await
+                    .map(Arc::new)
+                    .map_err(StateInitError::MainAuthenticatorInitError)
+        };
+
+        let main_client = stateful_result! { (user_id, portal_creds) =>
+            MainAuthenticatedClient::try_new(Arc::clone(&main_authenticator))
+                .map_err(StateInitError::MainAuthenticatedClientConstructionError)
+        };
+
+        let messages_client = stateful_result! { (user_id, portal_creds) =>
+            MessagesClient::init(Arc::clone(&main_authenticator))
+                .await
+                .map_err(StateInitError::MessagesClientInitError)
+        };
+
+        Ok(Self {
+            main_client,
+            messages_client,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+enum AuthenticatedSynergiaEndpoints {
+    Me,
+    Users,
+    Subjects,
+    Grades(GradesEndpoints),
+    Messages(MessagesEndpoints),
+}
+
+impl AuthenticatedSynergiaEndpoints {
+    fn url(&self) -> Url {
+        match self {
+            AuthenticatedSynergiaEndpoints::Me => SYNERGIA_URL.join("/gateway/api/2.0/Me").unwrap(),
+            AuthenticatedSynergiaEndpoints::Users => {
+                SYNERGIA_URL.join("/gateway/api/2.0/Users").unwrap()
+            }
+            AuthenticatedSynergiaEndpoints::Subjects => {
+                SYNERGIA_URL.join("/gateway/api/2.0/Subjects").unwrap()
+            }
+            AuthenticatedSynergiaEndpoints::Grades(grades) => grades.url(),
+            AuthenticatedSynergiaEndpoints::Messages(messages) => messages.url(),
+        }
+    }
+}
+
+// We're using the api of the new ui
+impl SynergiaApi<AuthenticatedState> {
+    pub async fn init(
+        user_id: SynergiaUserId,
+        portal_creds: PortalTokenPair,
+    ) -> Result<Self, StatefulError<(SynergiaUserId, PortalTokenPair), Error>> {
+        Ok(Self {
+            state: AuthenticatedState::init(user_id, portal_creds)
+                .await
+                .map_stateful_err(Error::StateInitError)?,
+        })
+    }
+
+    async fn fetch_synergia_endpoint<T: DeserializeOwned>(
+        &self,
+        endpoint: AuthenticatedSynergiaEndpoints,
+    ) -> Result<T, Error> {
+        debug!("fetching {endpoint:?}");
+        let resource = self
+            .state
+            .main_client
+            .as_inner()
+            .get(endpoint.url())
+            .send()
+            .await
+            .map_err(|e| Error::RequestError {
+                endpoint: endpoint.clone(),
+                source: e,
+            })?
+            .json::<T>()
+            .await
+            .map_err(|e| Error::ResponseDeserializationError {
+                endpoint: endpoint.clone(),
+                typename: any::type_name::<T>().to_owned(),
+                source: e,
+            })?;
+        debug!("fetched {endpoint:?} succesfully");
+        Ok(resource)
+    }
+
+    pub async fn fetch_users(&self) -> Result<Users, Error> {
+        Ok(self
+            .fetch_synergia_endpoint::<UsersResponse>(AuthenticatedSynergiaEndpoints::Users)
+            .await?
+            .into())
+    }
+
+    pub async fn fetch_subjects(&self) -> Result<Subjects, Error> {
+        Ok(self
+            .fetch_synergia_endpoint::<SubjectsResponse>(AuthenticatedSynergiaEndpoints::Subjects)
+            .await?
+            .into())
+    }
+
+    pub fn grades(&self) -> GradesManager {
+        GradesManager::new(&self)
+    }
+
+    pub fn messages(&self) -> MessagesManager {
+        MessagesManager::new(&self)
+    }
+}

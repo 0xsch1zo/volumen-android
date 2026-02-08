@@ -12,11 +12,12 @@ use crate::{
         self,
         synergia_api::{
             api::auth::{PortalTokenPair, SynergiaUserId},
+            authenticated::messages::MESSAGES_AUTHORIZATION_URL,
             credential_manager::{
                 CredentialManager, CredentialManagerError, Credentials,
                 SynergiaCredentialRefreshError,
             },
-            AuthenticatedSynergiaEndpoints, MessagesEndpoints, MESSAGES_URL,
+            MESSAGES_URL,
         },
         RequestCookieExt, RequestCookieExtError,
     },
@@ -90,9 +91,16 @@ impl MainAuthenticator {
                     }
                     Err(synergia_err) => {
                         error!("synergia refresh failed: {synergia_err:?}");
-                        let creds = self.credential_manager.refresh(creds).await.map_err(|e| {
-                            MainAuthenticatorError::FatalCredentialRefreshError(e, synergia_err)
-                        })?;
+                        let creds =
+                            self.credential_manager
+                                .full_refresh(creds)
+                                .await
+                                .map_err(|e| {
+                                    MainAuthenticatorError::FatalCredentialRefreshError(
+                                        e,
+                                        synergia_err,
+                                    )
+                                })?;
                         *cred_guard = Some(creds);
                     }
                 };
@@ -206,7 +214,7 @@ impl MessagesAuthenticator {
 
         let mut req = self
             .client
-            .get(AuthenticatedSynergiaEndpoints::Messages(MessagesEndpoints::Authorization).url())
+            .get(MESSAGES_AUTHORIZATION_URL.clone())
             .build()
             .map_err(MessagesAuthenticatorError::ClientInitError)?;
 

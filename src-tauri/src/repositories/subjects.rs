@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{
-        synergia_api::{self, AuthenticatedState},
+        synergia_api::{self, AuthenticatedState, AuthenticatedSynergiaApiError},
         SynergiaApi,
     },
 };
@@ -66,7 +66,7 @@ impl SubjectsRepository {
         self.cache
             .try_bulk_insert_with(async {
                 let subjects = self.synergia_api.fetch_subjects().await?;
-                Ok::<_, synergia_api::Error>(subjects)
+                Ok::<_, AuthenticatedSynergiaApiError>(subjects)
             })
             .await
             .map_err(|e| Error::SubjectFetchFailed(e))?;

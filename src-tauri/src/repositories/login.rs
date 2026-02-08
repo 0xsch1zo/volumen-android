@@ -3,7 +3,7 @@ use thiserror::Error;
 use crate::{
     error::{StatefulError, StatefulResultExt},
     net::{
-        synergia_api::{self, UnauthenticatedState},
+        synergia_api::{UnauthenticatedState, UnauthenticatedSynergiaApiError},
         SynergiaApi,
     },
     repositories::account_selection::AccountSelectionRepository,
@@ -12,9 +12,9 @@ use crate::{
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("failed to construct unauthenticated synergia api")]
-    UnauthedSynergiaConstructionError(#[source] synergia_api::Error),
+    UnauthedSynergiaConstructionError(#[source] UnauthenticatedSynergiaApiError),
     #[error("login error")]
-    LoginError(#[source] synergia_api::Error),
+    LoginError(#[source] UnauthenticatedSynergiaApiError),
 }
 
 #[derive(Debug)]

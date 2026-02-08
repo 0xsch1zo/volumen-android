@@ -5,9 +5,9 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
-    cache::{AutoKeyedCache, CacheComputeError, Keyable, SingleEntryCache},
+    cache::{CacheComputeError, Keyable, SingleEntryCache},
     net::{
-        synergia_api::{self, AuthenticatedState},
+        synergia_api::{AuthenticatedState, AuthenticatedSynergiaApiError},
         SynergiaApi,
     },
     repositories::{
@@ -227,7 +227,9 @@ impl GradesRepository {
         let shallow_grades = self
             .cache
             .try_get_with(async {
-                Ok::<_, synergia_api::Error>(self.synergia_api.grades().fetch_self().await?)
+                Ok::<_, AuthenticatedSynergiaApiError>(
+                    self.synergia_api.grades().fetch_self().await?,
+                )
             })
             .await
             .map_err(Error::GradeFetchFailed)?;

@@ -7,7 +7,7 @@ use crate::net::{
     self,
     synergia_api::{
         authenticators::{MainAuthenticator, MessagesAuthenticator, MessagesAuthenticatorError},
-        UnauthenticatedRedirectPolicy,
+        states::unauthenticated::UnauthenticatedRedirectPolicy,
     },
     ErrorStatusMiddleware,
 };

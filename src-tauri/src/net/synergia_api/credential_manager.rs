@@ -408,7 +408,8 @@ impl CredentialManager {
                 };
 
                 if me.is::<UnauthenticatedError>() {
-                    self.refresh_from_token(portal_creds.refresh_token).await
+                    self.full_refresh_from_token(portal_creds.refresh_token)
+                        .await
                 } else {
                     Err(CredentialManagerError::from(
                         LibrusApiCredentialFetchError::GeneralCredentialFetchError(
@@ -420,7 +421,7 @@ impl CredentialManager {
         }
     }
 
-    async fn refresh_from_token(
+    async fn full_refresh_from_token(
         &self,
         refresh_token: PortalRefreshToken,
     ) -> Result<Credentials, CredentialManagerError> {
@@ -440,11 +441,12 @@ impl CredentialManager {
         })
     }
 
-    pub async fn refresh(
+    pub async fn full_refresh(
         &self,
         tokens: Credentials,
     ) -> Result<Credentials, CredentialManagerError> {
-        self.refresh_from_token(tokens.portal.refresh_token).await
+        self.full_refresh_from_token(tokens.portal.refresh_token)
+            .await
     }
 
     pub fn synergia(&self) -> &SynergiaCredentialManager {

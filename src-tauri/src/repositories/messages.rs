@@ -3,8 +3,11 @@ use std::sync::Arc;
 use crate::{
     net::{
         synergia_api::{
-            AuthenticatedState, MessagesArchiveManager, MessagesManager, ReceivedMessagesManager,
-            SentMessagesManager,
+            authenticated::messages::{
+                MessagesArchiveManager, MessagesManager, ReceivedMessagesManager,
+                SentMessagesManager,
+            },
+            AuthenticatedState,
         },
         SynergiaApi,
     },

@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{
     cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{
-        synergia_api::{self, AuthenticatedState},
+        synergia_api::{AuthenticatedState, AuthenticatedSynergiaApiError},
         SynergiaApi,
     },
 };
@@ -65,7 +65,7 @@ impl CommentsRepository {
             .cache
             .try_get_with(&id, async {
                 let comment = self.synergia_api.grades().fetch_comment(id).await?;
-                Ok::<_, synergia_api::Error>(comment)
+                Ok::<_, AuthenticatedSynergiaApiError>(comment)
             })
             .await
             .map_err(|e| Error::CommentFetchFailed(e, id))?;

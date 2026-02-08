@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{
     cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{
-        synergia_api::{self, AuthenticatedState},
+        synergia_api::{self, AuthenticatedState, AuthenticatedSynergiaApiError},
         SynergiaApi,
     },
 };
@@ -65,7 +65,7 @@ impl UsersRepository {
 
         self.cache
             .try_bulk_insert_with(async {
-                Ok::<_, synergia_api::Error>(self.synergia_api.fetch_users().await?)
+                Ok::<_, AuthenticatedSynergiaApiError>(self.synergia_api.fetch_users().await?)
             })
             .await
             .map_err(|e| Error::UserFetchError(e))?;
