@@ -2,13 +2,16 @@ use std::sync::Arc;
 
 use crate::{
     net::{synergia_api::AuthenticatedState, SynergiaApi},
-    repositories::{grades::GradesRepository, messages::MessagesRepository},
+    repositories::{
+        grades::GradesRepository, messages::MessagesRepository, timetable::TimetableRepository,
+    },
 };
 
 #[derive(Debug)]
 pub struct MainRepository {
     grades: GradesRepository,
     messages: MessagesRepository,
+    timetables: TimetableRepository,
 }
 
 impl MainRepository {
@@ -17,8 +20,13 @@ impl MainRepository {
 
         let grades = GradesRepository::new(Arc::clone(&synergia_api));
         let messages = MessagesRepository::new(Arc::clone(&synergia_api));
+        let timetables = TimetableRepository::new(Arc::clone(&synergia_api));
 
-        Self { grades, messages }
+        Self {
+            grades,
+            messages,
+            timetables,
+        }
     }
 
     #[allow(unused)]
@@ -29,5 +37,10 @@ impl MainRepository {
     #[allow(unused)]
     pub fn messages(&self) -> &MessagesRepository {
         &self.messages
+    }
+
+    #[allow(unused)]
+    pub fn timetables(&self) -> &TimetableRepository {
+        &self.timetables
     }
 }

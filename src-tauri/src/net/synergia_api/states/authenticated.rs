@@ -13,6 +13,7 @@ use crate::{
                 auth::{PortalTokenPair, SynergiaUserId},
                 messages::MessageModelConversionError,
                 subjects::SubjectsResponse,
+                timetable,
                 users::UsersResponse,
             },
             authenticated::{grades::GradesManager, messages::MessagesManager},
@@ -26,7 +27,11 @@ use crate::{
         },
         SynergiaApi,
     },
-    repositories::{subjects::Subjects, users::Users},
+    repositories::{
+        subjects::Subjects,
+        timetable::{Timetable, WeekStart},
+        users::Users,
+    },
     stateful_result,
 };
 
@@ -41,7 +46,7 @@ pub enum Error {
     ModelConversionError(#[from] ModelConversionError),
     #[error("failed to send request to endpoint: {endpoint:?}")]
     RequestError {
-        endpoint: AuthenticatedSynergiaEndpoints,
+        endpoint: String,
         #[source]
         source: reqwest_middleware::Error,
     },
@@ -49,7 +54,7 @@ pub enum Error {
         "failed to deserialize response from endpoint: {endpoint:?},\n\twith type: {typename}"
     )]
     ResponseDeserializationError {
-        endpoint: AuthenticatedSynergiaEndpoints,
+        endpoint: String,
         typename: String,
         #[source]
         source: reqwest::Error,
@@ -68,8 +73,11 @@ pub enum StateInitError {
 
 #[derive(Error, Debug)]
 pub enum ModelConversionError {
+    // TODO: this should probably be a better error
     #[error("message model conversion error")]
     MessageConvError(#[from] MessageModelConversionError),
+    #[error("timetable model conversion error")]
+    TimetableConvError(#[source] timetable::ModelConversionError),
 }
 
 #[derive(Debug)]
@@ -116,6 +124,7 @@ enum AuthenticatedSynergiaEndpoints {
     Subjects,
     Grades(GradesEndpoints),
     Messages(MessagesEndpoints),
+    Timetable { week_start: String },
 }
 
 impl AuthenticatedSynergiaEndpoints {
@@ -128,6 +137,11 @@ impl AuthenticatedSynergiaEndpoints {
             AuthenticatedSynergiaEndpoints::Subjects => {
                 SYNERGIA_URL.join("/gateway/api/2.0/Subjects").unwrap()
             }
+            AuthenticatedSynergiaEndpoints::Timetable { week_start } => SYNERGIA_URL
+                .join(&format!(
+                    "/gateway/api/2.0/Timetables?weekStart={week_start}"
+                ))
+                .unwrap(),
             AuthenticatedSynergiaEndpoints::Grades(grades) => grades.url(),
             AuthenticatedSynergiaEndpoints::Messages(messages) => messages.url(),
         }
@@ -160,13 +174,13 @@ impl SynergiaApi<AuthenticatedState> {
             .send()
             .await
             .map_err(|e| Error::RequestError {
-                endpoint: endpoint.clone(),
+                endpoint: format!("{endpoint:?}"),
                 source: e,
             })?
             .json::<T>()
             .await
             .map_err(|e| Error::ResponseDeserializationError {
-                endpoint: endpoint.clone(),
+                endpoint: format!("{endpoint:?}"),
                 typename: any::type_name::<T>().to_owned(),
                 source: e,
             })?;
@@ -186,6 +200,20 @@ impl SynergiaApi<AuthenticatedState> {
             .fetch_synergia_endpoint::<SubjectsResponse>(AuthenticatedSynergiaEndpoints::Subjects)
             .await?
             .into())
+    }
+
+    pub async fn fetch_timetable(&self, week_start: WeekStart) -> Result<Timetable, Error> {
+        Ok(self
+            .fetch_synergia_endpoint::<timetable::Timetable>(
+                AuthenticatedSynergiaEndpoints::Timetable {
+                    week_start: week_start.into_inner(),
+                },
+            )
+            .await?
+            .try_into()
+            .map_err(|e| {
+                Error::ModelConversionError(ModelConversionError::TimetableConvError(e))
+            })?)
     }
 
     pub fn grades(&self) -> GradesManager {

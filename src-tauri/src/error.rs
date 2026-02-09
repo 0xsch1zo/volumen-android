@@ -6,6 +6,7 @@ use thiserror::Error;
 
 use crate::repositories;
 
+// TODO: I need better errors here
 #[derive(Error, Debug)]
 pub enum ApplicationError {
     #[error("account selection repository error")]
@@ -14,6 +15,8 @@ pub enum ApplicationError {
     LoginRepoError(#[from] repositories::login::Error),
     #[error("sent messages repository error")]
     SentMessagesRepoError(#[from] repositories::messages::sent::Error),
+    #[error("timetable repository error")]
+    TimetableRepository(#[from] repositories::timetable::Error),
     #[error("wanted to aquire wrong state: {0}")]
     WrongState(String),
 }

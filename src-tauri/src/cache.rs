@@ -16,14 +16,14 @@ impl CacheComputeError {
     }
 }
 
-pub trait Keyable<K: Copy + Hash + Eq> {
+pub trait Keyable<K: Hash + Eq> {
     fn key(&self) -> K;
 }
 
 #[derive(Debug, Clone)]
 #[allow(unused)]
 pub struct AutoKeyedCache<
-    K: Send + Sync + Clone + Copy + Hash + Eq + 'static,
+    K: Send + Sync + Clone + Hash + Eq + 'static,
     V: Send + Sync + Clone + Keyable<K> + 'static,
 > {
     cache: Cache<K, V>,
@@ -34,7 +34,7 @@ pub struct AutoKeyedCache<
 }
 
 impl<
-        K: Send + Sync + Clone + Copy + Hash + Eq + 'static,
+        K: Send + Sync + Clone + Hash + Eq + 'static,
         V: Send + Sync + Clone + Keyable<K> + 'static,
     > AutoKeyedCache<K, V>
 {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{
-        synergia_api::{self, AuthenticatedState, AuthenticatedSynergiaApiError},
+        synergia_api::{AuthenticatedState, AuthenticatedSynergiaApiError},
         SynergiaApi,
     },
 };

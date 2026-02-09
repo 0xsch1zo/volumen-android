@@ -4,6 +4,7 @@ pub mod login;
 pub mod main;
 pub mod messages;
 pub mod subjects;
+pub mod timetable;
 pub mod users;
 
 pub use account_selection::AccountSelectionRepository;

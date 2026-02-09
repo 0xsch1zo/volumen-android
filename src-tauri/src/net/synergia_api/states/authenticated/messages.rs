@@ -125,13 +125,13 @@ impl<'a> MessagesManager<'a> {
             .send()
             .await
             .map_err(|e| Error::RequestError {
-                endpoint: endpoint.clone(),
+                endpoint: format!("{endpoint:?}"),
                 source: e,
             })?
             .json::<T>()
             .await
             .map_err(|e| Error::ResponseDeserializationError {
-                endpoint: endpoint.clone(),
+                endpoint: format!("{endpoint:?}"),
                 typename: any::type_name::<T>().to_owned(),
                 source: e,
             })?;

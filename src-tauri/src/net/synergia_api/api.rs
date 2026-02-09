@@ -4,6 +4,7 @@ pub mod auth;
 pub mod grades;
 pub mod messages;
 pub mod subjects;
+pub mod timetable;
 pub mod users;
 
 // Generic reference used for internal purposes
