@@ -83,14 +83,14 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
         .into_app_result()
         .log_on_err()?;
 
-    let timetable = state
+    let events = state
         .main_repository
-        .timetables()
-        .timetable(WeekStart::new("2026-02-16".to_owned()))
+        .events()
+        .list()
         .await
         .into_app_result()
         .log_on_err()?;
-    Ok(format!("{timetable:?}"))
+    Ok(format!("{events:?}"))
 }
 
 // TODO: handle logs better for release

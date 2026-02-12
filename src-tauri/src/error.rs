@@ -13,6 +13,8 @@ pub enum ApplicationError {
     AccountSelectionRepoError(#[from] repositories::account_selection::Error),
     #[error("login repository error")]
     LoginRepoError(#[from] repositories::login::Error),
+    #[error("events repository error")]
+    EvnetsRepoError(#[from] repositories::events::Error),
     #[error("sent messages repository error")]
     SentMessagesRepoError(#[from] repositories::messages::sent::Error),
     #[error("timetable repository error")]

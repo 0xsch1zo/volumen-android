@@ -1,4 +1,5 @@
 pub mod account_selection;
+pub mod events;
 pub mod grades;
 pub mod login;
 pub mod main;

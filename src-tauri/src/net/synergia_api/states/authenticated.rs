@@ -16,7 +16,11 @@ use crate::{
                 timetable,
                 users::UsersResponse,
             },
-            authenticated::{grades::GradesManager, messages::MessagesManager},
+            authenticated::{
+                events::{EventsEndpoints, EventsManager},
+                grades::GradesManager,
+                messages::MessagesManager,
+            },
             authenticators::{MainAuthenticator, MainAuthenticatorError},
             clients::{
                 AuthenticatedClientConstructionError, MainAuthenticatedClient, MessagesClient,
@@ -35,6 +39,7 @@ use crate::{
     stateful_result,
 };
 
+mod events;
 mod grades;
 pub mod messages;
 
@@ -125,6 +130,7 @@ enum AuthenticatedSynergiaEndpoints {
     Grades(GradesEndpoints),
     Messages(MessagesEndpoints),
     Timetable { week_start: String },
+    Events(EventsEndpoints),
 }
 
 impl AuthenticatedSynergiaEndpoints {
@@ -144,6 +150,7 @@ impl AuthenticatedSynergiaEndpoints {
                 .unwrap(),
             AuthenticatedSynergiaEndpoints::Grades(grades) => grades.url(),
             AuthenticatedSynergiaEndpoints::Messages(messages) => messages.url(),
+            AuthenticatedSynergiaEndpoints::Events(events) => events.url(),
         }
     }
 }
@@ -222,5 +229,9 @@ impl SynergiaApi<AuthenticatedState> {
 
     pub fn messages(&self) -> MessagesManager {
         MessagesManager::new(&self)
+    }
+
+    pub fn events(&self) -> EventsManager {
+        EventsManager::new(&self)
     }
 }
