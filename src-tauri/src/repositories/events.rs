@@ -1,20 +1,32 @@
+mod categories;
+
 use std::sync::Arc;
 
+use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use thiserror::Error;
 
 use crate::{
     cache::{CacheComputeError, SingleEntryCache},
     net::{synergia_api::AuthenticatedState, SynergiaApi},
     repositories::{
-        subjects::{Subject, SubjectId},
-        users::{User, UserId},
+        events::categories::CategoriesRepository,
+        subjects::{self, Subject, SubjectId, SubjectsRepository},
+        users::{self, User, UserId, UsersRepository},
     },
 };
+
+pub use categories::{Category, CategoryId};
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("failed to fetch event list")]
     EventListFetchError(#[source] CacheComputeError),
+    #[error("failed to fetch category")]
+    CategoryFetchError(#[source] categories::Error),
+    #[error("failed to fetch user")]
+    UserFetchError(#[source] users::Error),
+    #[error("failed to fetch subject")]
+    SubjectFetchError(#[source] subjects::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -31,20 +43,6 @@ impl EventId {
 }
 
 #[derive(Debug, Clone)]
-pub struct CategoryId(usize);
-
-impl CategoryId {
-    pub fn new(_0: usize) -> Self {
-        Self(_0)
-    }
-}
-
-pub struct Category {
-    pub id: CategoryId,
-    pub name: String,
-}
-
-#[derive(Debug, Clone)]
 pub struct ShallowEvent {
     pub id: EventId,
     pub content: String,
@@ -57,6 +55,7 @@ pub struct ShallowEvent {
     pub add_date: String,
 }
 
+#[derive(Debug)]
 pub struct Event {
     pub id: EventId,
     pub content: String,
@@ -69,24 +68,105 @@ pub struct Event {
     pub add_date: String,
 }
 
+struct EventFactory<'a> {
+    categories: &'a CategoriesRepository,
+    users: &'a UsersRepository,
+    subjects: &'a SubjectsRepository,
+}
+
+impl<'a> EventFactory<'a> {
+    fn new(
+        categories: &'a CategoriesRepository,
+        users: &'a UsersRepository,
+        subjects: &'a SubjectsRepository,
+    ) -> Self {
+        Self {
+            categories,
+            users,
+            subjects,
+        }
+    }
+
+    async fn create_from_shallow(&self, shallow: ShallowEvent) -> Result<Event, Error> {
+        let category_fut = self
+            .categories
+            .category(shallow.category)
+            .map_err(Error::CategoryFetchError);
+        let created_by_fut = self
+            .users
+            .user(shallow.created_by)
+            .map_err(Error::UserFetchError);
+        let subject_fut = shallow
+            .subject
+            .map(|s| self.subjects.subject(s).map_err(Error::SubjectFetchError));
+        if let Some(subject_fut) = subject_fut {
+            let (category, created_by, subject) =
+                tokio::try_join!(category_fut, created_by_fut, subject_fut)?;
+            Ok(Event {
+                category,
+                created_by,
+                subject: Some(subject),
+                time_from: shallow.time_from,
+                time_to: shallow.time_to,
+                add_date: shallow.add_date,
+                id: shallow.id,
+                content: shallow.content,
+                date: shallow.date,
+            })
+        } else {
+            let (category, created_by) = tokio::try_join!(category_fut, created_by_fut)?;
+            Ok(Event {
+                category,
+                created_by,
+                subject: None,
+                time_from: shallow.time_from,
+                time_to: shallow.time_to,
+                add_date: shallow.add_date,
+                id: shallow.id,
+                content: shallow.content,
+                date: shallow.date,
+            })
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct EventsRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
     cache: SingleEntryCache<Vec<ShallowEvent>>,
+    categories: CategoriesRepository,
+    users: UsersRepository,
+    subjects: SubjectsRepository,
 }
 
 impl EventsRepository {
     pub fn new(synergia_api: Arc<SynergiaApi<AuthenticatedState>>) -> Self {
+        let categories = CategoriesRepository::new(Arc::clone(&synergia_api));
+        let users = UsersRepository::new(Arc::clone(&synergia_api));
+        let subjects = SubjectsRepository::new(Arc::clone(&synergia_api));
+
         Self {
             synergia_api,
+            categories,
+            users,
+            subjects,
             cache: SingleEntryCache::new(),
         }
     }
 
-    pub async fn list(&self) -> Result<Vec<ShallowEvent>, Error> {
-        self.cache
-            .try_get_with(async { self.synergia_api.events().list().await })
+    pub async fn list(&self) -> Result<Vec<Event>, Error> {
+        let shallow_events = self
+            .cache
+            .try_get_with(async { self.synergia_api.events().fetch_list().await })
             .await
-            .map_err(Error::EventListFetchError)
+            .map_err(Error::EventListFetchError)?;
+
+        let event_factory = EventFactory::new(&self.categories, &self.users, &self.subjects);
+
+        stream::iter(shallow_events)
+            .map(async |s| event_factory.create_from_shallow(s).await)
+            .buffer_unordered(10)
+            .try_collect::<Vec<_>>()
+            .await
     }
 }

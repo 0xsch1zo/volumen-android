@@ -39,7 +39,7 @@ impl From<CategoryId> for models::CategoryId {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct Category {
+pub struct Category {
     id: CategoryId,
     name: String,
 }
@@ -56,7 +56,7 @@ impl From<Category> for models::Category {
 #[derive(Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct CategoriesResponse {
-    categories: Vec<Category>,
+    pub categories: Vec<Category>,
 }
 
 #[derive(Deserialize)]
