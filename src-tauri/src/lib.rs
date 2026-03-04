@@ -96,6 +96,8 @@ async fn send(state: State<'_, AppStates>, login: String, password: String) -> R
 // TODO: handle logs better for release
 #[cfg(target_os = "android")]
 fn init_logging() {
+    use android_logger::Config;
+
     android_logger::init_once(Config::default().with_max_level(LevelFilter::Trace));
 }
 

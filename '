@@ -5,16 +5,12 @@
 
 body {
     font-family: "Roboto";
-    max-height: 100dvh;
 }
 
 .loginPage {
-    overflow: clip;
     min-height: 100dvh;
     max-height: 100dvh;
-    min-width: 100dvw;
-    max-width: 100dvw;
-    display: flex;
+    overflow: hidden display: flex;
     justify-content: center;
     flex-direction: column;
 }
@@ -51,14 +47,10 @@ body {
 
 .pageBackground {
     position: absolute;
-    min-height: 100dvh;
-    max-height: 100dvh;
-    min-width: 100dvw;
-    max-width: 100dvw;
+    height: 100dvh;
     z-index: -1;
     mask-size: contain;
     mask-repeat: no-repeat;
-    /* overflow: hidden;  still haave trouble with this one */
 }
 
 .pageBackground-6-sided-cookie {
@@ -81,8 +73,8 @@ body {
     mask-image: url("assets/login-bg-shapes/9-sided-cookie.svg");
     mask-size: inherit;
     mask-repeat: inherit;
-    bottom: -20dvh;
     left: -25dvw;
+    bottom: -20dvh;
 }
 
 .pageBackground-circle {
@@ -95,7 +87,7 @@ body {
     mask-size: inherit;
     mask-repeat: inherit;
     top: 18dvh;
-    right: -126dvw;
+    right: -124.5dvw;
 }
 
 .pageBackground-pentagon {
