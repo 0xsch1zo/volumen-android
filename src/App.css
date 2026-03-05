@@ -3,13 +3,14 @@
     src: url("assets/Roboto-VariableFont_wdth\,wght.ttf");
 }
 
+html,
 body {
     font-family: "Roboto";
-    max-height: 100dvh;
+    margin: 0;
+    overflow: hidden;
 }
 
 .loginPage {
-    overflow: clip;
     min-height: 100dvh;
     max-height: 100dvh;
     min-width: 100dvw;
@@ -52,13 +53,13 @@ body {
 .pageBackground {
     position: absolute;
     min-height: 100dvh;
-    max-height: 100dvh;
     min-width: 100dvw;
+    max-height: 100dvh;
     max-width: 100dvw;
+    overflow: hidden;
     z-index: -1;
     mask-size: contain;
     mask-repeat: no-repeat;
-    /* overflow: hidden;  still haave trouble with this one */
 }
 
 .pageBackground-6-sided-cookie {
@@ -95,7 +96,7 @@ body {
     mask-size: inherit;
     mask-repeat: inherit;
     top: 18dvh;
-    right: -126dvw;
+    right: -27dvw;
 }
 
 .pageBackground-pentagon {
@@ -108,5 +109,5 @@ body {
     mask-size: inherit;
     mask-repeat: inherit;
     bottom: 12dvh;
-    right: -115dvw;
+    right: -20dvw;
 }
