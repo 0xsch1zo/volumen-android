@@ -4,8 +4,8 @@ import LoginPage from "./pages/Login";
 function App() {
     return (
         <main className="container">
-            <LoginPage></LoginPage>
-        </main>
+            <LoginPage />
+        </main >
     );
 }
 

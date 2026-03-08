@@ -117,6 +117,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_m3::init())
         .setup(|app| {
             let state = Mutex::new(AppStatesInner::try_new()?);
             app.manage(state);
