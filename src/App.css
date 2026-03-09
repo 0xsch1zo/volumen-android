@@ -8,7 +8,6 @@ body {
     font-family: "Roboto";
     margin: 0;
     overflow: hidden;
-    background-color: var(--md-sys-color-background);
 }
 
 .loginPage {
@@ -71,7 +70,7 @@ body {
     position: absolute;
     height: 34dvh;
     width: 34dvh;
-    background-color: var(--md-sys-color-tertiary);
+    background-color: var(--md-sys-color-primary);
     mask-image: url("assets/login-bg-shapes/6-sided-cookie.svg");
     mask-size: inherit;
     mask-repeat: inherit;
