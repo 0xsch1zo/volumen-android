@@ -25,7 +25,7 @@ pub enum ApplicationError {
 
 trait ErrorChainExt: StdError {
     fn to_display_chain(&self) -> String {
-        fn display(error: &(dyn StdError), chain: String) -> String {
+        fn display(error: &dyn StdError, chain: String) -> String {
             let Some(source) = error.source() else {
                 return chain;
             };

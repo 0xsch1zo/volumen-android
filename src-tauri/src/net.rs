@@ -159,11 +159,11 @@ pub enum ResponseCookieExtError {
 }
 
 trait ResponseCookieExt {
-    fn extract_cookie(&self, name: &str) -> Result<Option<Cookie>, ResponseCookieExtError>;
+    fn extract_cookie(&self, name: &str) -> Result<Option<Cookie<'_>>, ResponseCookieExtError>;
 }
 
 impl ResponseCookieExt for Response {
-    fn extract_cookie(&self, name: &str) -> Result<Option<Cookie>, ResponseCookieExtError> {
+    fn extract_cookie(&self, name: &str) -> Result<Option<Cookie<'_>>, ResponseCookieExtError> {
         let cookie_headers = self
             .headers()
             .get_all(header::SET_COOKIE)

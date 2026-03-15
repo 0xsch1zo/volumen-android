@@ -139,15 +139,15 @@ impl<'a> MessagesManager<'a> {
         Ok(resource)
     }
 
-    pub fn received(&self) -> ReceivedMessagesManager {
+    pub fn received(&self) -> ReceivedMessagesManager<'_> {
         ReceivedMessagesManager::new(self, MessagesSource::Current)
     }
 
-    pub fn sent(&self) -> SentMessagesManager {
+    pub fn sent(&self) -> SentMessagesManager<'_> {
         SentMessagesManager::new(self, MessagesSource::Current)
     }
 
-    pub fn archive(&self) -> MessagesArchiveManager {
+    pub fn archive(&self) -> MessagesArchiveManager<'_> {
         MessagesArchiveManager::new(self)
     }
 }
@@ -261,11 +261,11 @@ impl<'a> MessagesArchiveManager<'a> {
         Self { messages_manager }
     }
 
-    pub fn received(&self) -> ReceivedMessagesManager {
+    pub fn received(&self) -> ReceivedMessagesManager<'_> {
         ReceivedMessagesManager::new(&self.messages_manager, MessagesSource::Archive)
     }
 
-    pub fn sent(&self) -> SentMessagesManager {
+    pub fn sent(&self) -> SentMessagesManager<'_> {
         SentMessagesManager::new(&self.messages_manager, MessagesSource::Archive)
     }
 }

@@ -4,7 +4,6 @@ use thiserror::Error;
 
 use crate::{
     cache::{AutoKeyedCache, CacheComputeError, Keyable, SingleEntryCache},
-    net::{synergia_api::AuthenticatedState, SynergiaApi},
     repositories::messages::{
         AttachmentReference, Limit, MessageId, MessagesSource, Page, Receiver,
     },

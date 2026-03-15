@@ -89,26 +89,26 @@ pub struct Receiver {
 }
 
 trait MessagesSource: Send + Sync {
-    fn sent(&self) -> SentMessagesManager;
-    fn received(&self) -> ReceivedMessagesManager;
+    fn sent(&self) -> SentMessagesManager<'_>;
+    fn received(&self) -> ReceivedMessagesManager<'_>;
 }
 
 impl MessagesSource for MessagesManager<'_> {
-    fn sent(&self) -> SentMessagesManager {
+    fn sent(&self) -> SentMessagesManager<'_> {
         self.sent()
     }
 
-    fn received(&self) -> ReceivedMessagesManager {
+    fn received(&self) -> ReceivedMessagesManager<'_> {
         self.received()
     }
 }
 
 impl MessagesSource for MessagesArchiveManager<'_> {
-    fn sent(&self) -> SentMessagesManager {
+    fn sent(&self) -> SentMessagesManager<'_> {
         self.sent()
     }
 
-    fn received(&self) -> ReceivedMessagesManager {
+    fn received(&self) -> ReceivedMessagesManager<'_> {
         self.received()
     }
 }
@@ -129,15 +129,15 @@ impl MessagesRepository {
         }
     }
 
-    pub fn received(&self) -> ReceivedMessagesDelegate {
+    pub fn received(&self) -> ReceivedMessagesDelegate<'_> {
         self.recieved.delegate(self.synergia_api.messages())
     }
 
-    pub fn sent(&self) -> SentMessagesDelegate {
+    pub fn sent(&self) -> SentMessagesDelegate<'_> {
         self.sent.delegate(self.synergia_api.messages())
     }
 
-    pub fn archive(&self) -> ArchiveDelegate {
+    pub fn archive(&self) -> ArchiveDelegate<'_> {
         ArchiveDelegate::new(self, self.synergia_api.messages())
     }
 }
@@ -158,13 +158,13 @@ impl<'a> ArchiveDelegate<'a> {
         }
     }
 
-    pub fn received(&'a self) -> ReceivedMessagesDelegate<'a> {
+    pub fn received(&self) -> ReceivedMessagesDelegate<'_> {
         self.message_repository
             .recieved
             .delegate(self.messages_manager.archive())
     }
 
-    pub fn sent(&self) -> SentMessagesDelegate {
+    pub fn sent(&self) -> SentMessagesDelegate<'_> {
         self.message_repository
             .sent
             .delegate(self.messages_manager.archive())

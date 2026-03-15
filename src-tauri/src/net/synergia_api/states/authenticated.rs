@@ -223,15 +223,15 @@ impl SynergiaApi<AuthenticatedState> {
             })?)
     }
 
-    pub fn grades(&self) -> GradesManager {
+    pub fn grades(&self) -> GradesManager<'_> {
         GradesManager::new(&self)
     }
 
-    pub fn messages(&self) -> MessagesManager {
+    pub fn messages(&self) -> MessagesManager<'_> {
         MessagesManager::new(&self)
     }
 
-    pub fn events(&self) -> EventsManager {
+    pub fn events(&self) -> EventsManager<'_> {
         EventsManager::new(&self)
     }
 }
