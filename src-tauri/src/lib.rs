@@ -15,6 +15,7 @@ use crate::{
 };
 
 mod cache;
+mod commands;
 mod common;
 mod error;
 mod net;

@@ -1,10 +1,10 @@
 import "./App.css";
-import LoginPage from "./pages/Login";
+import { Outlet } from "react-router";
 
 function App() {
     return (
         <main className="container">
-            <LoginPage />
+            <Outlet />
         </main >
     );
 }
