@@ -3,5 +3,5 @@ import {
 } from "@react-router/dev/routes";
 
 export default [
-    index("./pages/LoginPage.tsx")
+    index("./routes/login.tsx")
 ]
