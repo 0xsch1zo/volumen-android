@@ -6,4 +6,5 @@ export default {
     appDirectory: "src/",
     buildDirectory: "dist/",
     ssr: false,
+    prerender: ["/"],
 } satisfies Config;
