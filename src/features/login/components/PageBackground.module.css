@@ -1,0 +1,60 @@
+.container {
+    background-color: var(--md-sys-color-background);
+    position: absolute;
+    min-height: 100dvh;
+    min-width: 100dvw;
+    max-height: 100dvh;
+    max-width: 100dvw;
+    overflow: hidden;
+    z-index: 0;
+    mask-size: contain;
+    mask-repeat: no-repeat;
+}
+
+.sixSidedCookie {
+    position: absolute;
+    height: 34dvh;
+    width: 34dvh;
+    background-color: var(--md-sys-color-primary);
+    mask-image: url("../assets/bg-shapes/6-sided-cookie.svg");
+    mask-size: inherit;
+    mask-repeat: inherit;
+    top: 5dvh;
+    left: -45dvw;
+}
+
+.nineSidedCookie {
+    position: absolute;
+    height: 40dvh;
+    width: 40dvh;
+    background-color: var(--md-sys-color-secondary);
+    mask-image: url("../assets/bg-shapes/9-sided-cookie.svg");
+    mask-size: inherit;
+    mask-repeat: inherit;
+    bottom: -20dvh;
+    left: -25dvw;
+}
+
+.circle {
+    position: absolute;
+    height: 30dvh;
+    width: 30dvh;
+    background-color: var(--md-sys-color-secondary);
+    mask-image: url("../assets/bg-shapes/circle.svg");
+    mask-size: inherit;
+    mask-repeat: inherit;
+    top: 18dvh;
+    right: -35dvw;
+}
+
+.pentagon {
+    position: absolute;
+    height: 23dvh;
+    width: 23dvh;
+    background-color: var(--md-sys-color-primary);
+    mask-image: url("../assets/bg-shapes/pentagon.svg");
+    mask-size: inherit;
+    mask-repeat: inherit;
+    bottom: 12dvh;
+    right: -20dvw;
+}

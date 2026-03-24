@@ -1,0 +1,11 @@
+@font-face {
+    font-family: "Roboto";
+    src: url("./assets/Roboto-VariableFont_wdth\,wght.ttf");
+}
+
+html,
+body {
+    font-family: "Roboto";
+    margin: 0;
+    overflow: hidden;
+}

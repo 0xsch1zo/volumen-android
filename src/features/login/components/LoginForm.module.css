@@ -1,0 +1,31 @@
+.container {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    z-index: 1;
+}
+
+.heading {
+    margin: 3rem 0rem;
+    color: var(--md-sys-color-primary)
+}
+
+.form {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    width: 77dvw;
+    max-width: 77dvw;
+    --m3e-form-field-width: 77dvw;
+    max-height: inherit;
+}
+
+.actionButtons {
+    display: flex;
+    width: 77dvw;
+    height: 7.75rem;
+    flex-direction: column;
+    justify-content: space-between;
+    --m3e-button-medium-label-text-font-weight: bold;
+}

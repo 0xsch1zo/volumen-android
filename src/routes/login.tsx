@@ -1,7 +1,9 @@
 import type { Route } from "./+types/login";
 
-import LoginPage from "../pages/LoginPage";
+import LoginForm from "../features/login/components/LoginForm";
 import initTheme from "../theme";
+import PageBackground from "../features/login/components/PageBackground";
+import style from "./login.module.css"
 
 
 export async function clientLoader({ }) {
@@ -12,7 +14,12 @@ export async function clientLoader({ }) {
 }
 
 function Login({ }: Route.ComponentProps) {
-    return <LoginPage />
+    return (
+        <div className={style.container}>
+            <PageBackground />
+            <LoginForm />
+        </div>
+    )
 }
 
 export default Login;

@@ -4,22 +4,23 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "react-router dev",
     "build": "tsc && react-router build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
-    "@react-router/node": "^7.13.0",
     "@m3e/react": "^2.0.0",
     "@material/material-color-utilities": "^0.4.0",
+    "@react-router/node": "^7.13.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "isbot": "^5",
     "material": "github:material-esm/material",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tauri-plugin-m3": "file:../tauri-plugin-m3",
-    "isbot": "^5"
+    "react-router": "^7.13.2",
+    "tauri-plugin-m3": "file:../tauri-plugin-m3"
   },
   "devDependencies": {
     "@react-router/dev": "^7.13.0",
