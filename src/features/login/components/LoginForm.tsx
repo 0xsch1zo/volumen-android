@@ -2,7 +2,7 @@ import { M3eButton } from "@m3e/react/button"
 import { M3eFormField } from "@m3e/react/form-field"
 import { M3eHeading } from "@m3e/react/heading"
 import { useState } from "react"
-import { login } from "../api/login.ts"
+import { login } from "../api.ts"
 import { useNavigate } from "react-router"
 import style from "./LoginForm.module.css"
 
@@ -27,10 +27,12 @@ function LoginForm() {
                 onSubmit={async (e) => {
                     e.preventDefault()
                     await login(loginValue, password)
-                    navigate("")
+                    navigate("/choose-account")
                 }}
             >
-                <M3eFormField variant="outlined">
+                <M3eFormField
+                    variant="outlined"
+                >
                     <label slot="label" htmlFor="login-input">Login</label>
                     <input
                         id="login-input"
@@ -38,7 +40,9 @@ function LoginForm() {
                     ></input>
                 </M3eFormField>
 
-                <M3eFormField variant="outlined">
+                <M3eFormField
+                    variant="outlined"
+                >
                     <label slot="label" htmlFor="password-input">Password</label>
                     <input
                         id="password-input"

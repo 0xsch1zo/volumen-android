@@ -8,4 +8,6 @@ body {
     font-family: "Roboto";
     margin: 0;
     overflow: hidden;
+    /* temporary */
+    background-color: var(--md-sys-color-background);
 }

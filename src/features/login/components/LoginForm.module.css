@@ -7,7 +7,7 @@
 
 .heading {
     margin: 3rem 0rem;
-    color: var(--md-sys-color-primary)
+    color: var(--md-sys-color-on-surface);
 }
 
 .form {
@@ -19,6 +19,10 @@
     max-width: 77dvw;
     --m3e-form-field-width: 77dvw;
     max-height: inherit;
+}
+
+.formField {
+    --m3e-form-field-container-shape: 0rem;
 }
 
 .actionButtons {

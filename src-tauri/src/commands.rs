@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[tauri::command]
-async fn login(state: State<'_, AppStates>, login: String, password: String) -> Result<()> {
+pub async fn login(state: State<'_, AppStates>, login: String, password: String) -> Result<()> {
     let mut state_lock = state.lock().await;
     state_lock
         .state_transition::<UnauthenticatedState, AccountSelectionState>(async |s| {
@@ -27,7 +27,7 @@ async fn login(state: State<'_, AppStates>, login: String, password: String) -> 
 }
 
 #[tauri::command]
-async fn accounts(state: State<'_, AppStates>) -> Result<Vec<SynergiaAccount>> {
+pub async fn accounts(state: State<'_, AppStates>) -> Result<Vec<SynergiaAccount>> {
     let state_lock = state.lock().await;
     let state = state_lock
         .as_state::<AccountSelectionState>()

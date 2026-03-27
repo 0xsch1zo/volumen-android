@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "react-router dev",
-    "build": "tsc && react-router build",
+    "build": "react-router typegen && tsc && react-router build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
-    "@m3e/react": "^2.0.0",
+    "@m3e/react": "file:../forks/m3e/packages/react/",
     "@material/material-color-utilities": "^0.4.0",
     "@react-router/node": "^7.13.0",
     "@tauri-apps/api": "^2",
@@ -20,7 +20,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router": "^7.13.2",
-    "tauri-plugin-m3": "file:../tauri-plugin-m3"
+    "tauri-plugin-m3": "^0.3.2"
   },
   "devDependencies": {
     "@react-router/dev": "^7.13.0",

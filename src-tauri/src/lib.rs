@@ -124,7 +124,10 @@ pub fn run() {
             app.manage(state);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![send])
+        .invoke_handler(tauri::generate_handler![
+            commands::login,
+            commands::accounts
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
