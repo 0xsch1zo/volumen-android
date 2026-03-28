@@ -1,3 +1,4 @@
+use tauri::{Emitter, Runtime};
 use thiserror::Error;
 
 use crate::{

@@ -5,6 +5,7 @@ import { useState } from "react"
 import { login } from "../api.ts"
 import { useNavigate } from "react-router"
 import style from "./LoginForm.module.css"
+import registerLogoutListener from "../../../utils/logoutListener.ts"
 
 function LoginForm() {
     const [loginValue, setLogin] = useState("");
@@ -27,6 +28,7 @@ function LoginForm() {
                 onSubmit={async (e) => {
                     e.preventDefault()
                     await login(loginValue, password)
+                    registerLogoutListener()
                     navigate("/choose-account")
                 }}
             >

@@ -1,9 +1,10 @@
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::{
     error::{ApplicationResultExt, LoggedApplicationResultExt, StatefulResultExt},
     repositories::account_selection::{SynergiaAccount, SynergiaUserId},
     state::{AccountSelectionState, AppStates, AuthenticatedState, UnauthenticatedState},
+    sync::LogoutSignaler,
     Result,
 };
 
@@ -27,7 +28,10 @@ pub async fn login(state: State<'_, AppStates>, login: String, password: String)
 }
 
 #[tauri::command]
-pub async fn accounts(state: State<'_, AppStates>) -> Result<Vec<SynergiaAccount>> {
+pub async fn accounts(app_handle: AppHandle) -> Result<Vec<SynergiaAccount>> {
+    let logout_signaler = LogoutSignaler::new(app_handle.clone());
+    logout_signaler.send_logout_event();
+    let state = app_handle.state::<AppStates>();
     let state_lock = state.lock().await;
     let state = state_lock
         .as_state::<AccountSelectionState>()
@@ -36,7 +40,7 @@ pub async fn accounts(state: State<'_, AppStates>) -> Result<Vec<SynergiaAccount
 
     let accounts = state
         .account_selection_repo
-        .accounts()
+        .accounts(logout_signaler)
         .await
         .into_app_result()
         .log_on_err()?;
@@ -44,13 +48,16 @@ pub async fn accounts(state: State<'_, AppStates>) -> Result<Vec<SynergiaAccount
 }
 
 #[tauri::command]
-async fn select_account(state: State<'_, AppStates>, user_id: SynergiaUserId) -> Result<()> {
+pub async fn select_account(app_handle: AppHandle, user_id: SynergiaUserId) -> Result<()> {
+    let logout_signaler = LogoutSignaler::new(app_handle.clone());
+    logout_signaler.send_logout_event();
+    let state = app_handle.state::<AppStates>();
     let mut state_lock = state.lock().await;
     state_lock
         .state_transition::<AccountSelectionState, AuthenticatedState>(async |s| {
             Ok(AuthenticatedState::new(
                 s.account_selection_repo
-                    .select(user_id)
+                    .select(user_id, logout_signaler)
                     .await
                     .map_err_state(AccountSelectionState::new)
                     .map_stateful_err(Into::into)?,

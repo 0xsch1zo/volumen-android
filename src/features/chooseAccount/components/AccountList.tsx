@@ -4,6 +4,7 @@ import { M3eHeading } from "@m3e/react/heading"
 import { Account } from "../types"
 import styles from "./AccountsList.module.css"
 import chevronRight from "../assets/chevron_right.svg";
+import { invoke } from "@tauri-apps/api/core"
 
 function AccountItem({ account }: { account: Account }) {
     if (account.student_name.length == 0)
@@ -16,6 +17,9 @@ function AccountItem({ account }: { account: Account }) {
             className={styles.accountItem}
             variant="outlined"
             actionable
+            onClick={async () => {
+                await invoke("select_account", { userId: account.id })
+            }}
         >
             <div className={styles.accountCard}>
                 <div className={styles.accountCardLeft}>

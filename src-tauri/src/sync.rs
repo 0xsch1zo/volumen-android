@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use tauri::{AppHandle, Emitter};
+use thiserror::Error;
 use tokio::sync::{
     broadcast::{self, Sender},
     RwLock,
@@ -39,5 +43,27 @@ impl<T: Send + Sync + Clone> SingleParallelFlight<T> {
             }
             FlightState::Flying => self.tx.subscribe().recv().await.unwrap(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Error)]
+#[error("failed to emit logout event")]
+pub struct LogoutEventEmissionError(Arc<tauri::Error>);
+
+#[derive(Debug, Clone)]
+pub struct LogoutSignaler {
+    app_handle: AppHandle,
+}
+
+impl LogoutSignaler {
+    pub fn new(app_handle: AppHandle) -> Self {
+        Self { app_handle }
+    }
+
+    pub fn send_logout_event(&self) -> Result<(), LogoutEventEmissionError> {
+        self.app_handle
+            .emit("logout", ())
+            .map_err(Arc::new)
+            .map_err(LogoutEventEmissionError)
     }
 }

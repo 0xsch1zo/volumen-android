@@ -1,18 +1,9 @@
 use std::env;
 
-use log::{error, LevelFilter};
-use tauri::{async_runtime::Mutex, Manager, State};
+use log::LevelFilter;
+use tauri::{async_runtime::Mutex, Manager};
 
-use crate::{
-    error::{ApplicationResultExt, FrontendError, LoggedApplicationResultExt, StatefulResultExt},
-    repositories::{
-        messages::{Limit, MessageId, Page},
-        timetable::WeekStart,
-    },
-    state::{
-        AccountSelectionState, AppStates, AppStatesInner, AuthenticatedState, UnauthenticatedState,
-    },
-};
+use crate::{error::FrontendError, state::AppStatesInner};
 
 mod cache;
 mod commands;
@@ -36,63 +27,6 @@ const fn is_debug() -> bool {
 }
 
 type Result<T, E = FrontendError> = std::result::Result<T, E>;
-
-#[tauri::command]
-async fn send(state: State<'_, AppStates>, login: String, password: String) -> Result<String> {
-    let mut state_lock = state.lock().await;
-    state_lock
-        .state_transition::<UnauthenticatedState, AccountSelectionState>(async |s| {
-            let account_selection_repo = s
-                .login_repo
-                .login(login, password)
-                .await
-                .map_err_state(UnauthenticatedState::new)
-                .map_stateful_err(Into::into)?;
-            Ok(AccountSelectionState::new(account_selection_repo))
-        })
-        .await
-        .into_app_result()
-        .log_on_err()?;
-
-    let state = state_lock
-        .as_state::<AccountSelectionState>()
-        .into_app_result()
-        .log_on_err()?;
-
-    let accounts = state
-        .account_selection_repo
-        .accounts()
-        .await
-        .into_app_result()
-        .log_on_err()?;
-
-    state_lock
-        .state_transition::<AccountSelectionState, AuthenticatedState>(async |s| {
-            Ok(AuthenticatedState::new(
-                s.account_selection_repo
-                    .select(accounts[0].id)
-                    .await
-                    .map_err_state(AccountSelectionState::new)
-                    .map_stateful_err(Into::into)?,
-            ))
-        })
-        .await
-        .into_app_result()
-        .log_on_err()?;
-    let state = state_lock
-        .as_state::<AuthenticatedState>()
-        .into_app_result()
-        .log_on_err()?;
-
-    let events = state
-        .main_repository
-        .events()
-        .list()
-        .await
-        .into_app_result()
-        .log_on_err()?;
-    Ok(format!("{events:?}"))
-}
 
 // TODO: handle logs better for release
 #[cfg(target_os = "android")]
@@ -126,7 +60,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::login,
-            commands::accounts
+            commands::accounts,
+            commands::select_account,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

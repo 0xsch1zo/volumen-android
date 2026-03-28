@@ -1,10 +1,11 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
     error::{StatefulError, StatefulResultExt},
     net::synergia_api::account_selector::{AccountSelector, AccountSelectorError},
     repositories::main::MainRepository,
+    sync::LogoutSignaler,
 };
 
 #[derive(Error, Debug)]
@@ -15,7 +16,7 @@ pub enum Error {
     AccountsFetchError(#[source] AccountSelectorError),
 }
 
-#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct SynergiaUserId(usize);
 
@@ -50,10 +51,13 @@ impl AccountSelectionRepository {
         Self { account_selector }
     }
 
-    pub async fn accounts(&self) -> Result<SynergiaAccounts, Error> {
+    pub async fn accounts(
+        &self,
+        logout_signaler: LogoutSignaler,
+    ) -> Result<SynergiaAccounts, Error> {
         Ok(self
             .account_selector
-            .accounts()
+            .accounts(&logout_signaler)
             .await
             .map_err(Error::AccountsFetchError)?)
     }
@@ -61,9 +65,10 @@ impl AccountSelectionRepository {
     pub async fn select(
         self,
         user_id: SynergiaUserId,
+        logout_signaler: LogoutSignaler,
     ) -> Result<MainRepository, StatefulError<Self, Error>> {
         self.account_selector
-            .select(user_id)
+            .select(user_id, logout_signaler)
             .await
             .map(MainRepository::new)
             .map_err_state(AccountSelectionRepository::new)

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use futures::TryFutureExt;
 use log::{debug, error};
 use reqwest::{redirect::Policy, Request, Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
@@ -21,7 +22,7 @@ use crate::{
         },
         RequestCookieExt, RequestCookieExtError,
     },
-    sync::SingleParallelFlight,
+    sync::{LogoutEventEmissionError, LogoutSignaler, SingleParallelFlight},
 };
 
 #[derive(Error, Clone, Debug)]
@@ -41,12 +42,17 @@ pub enum MainAuthenticatorError {
     ),
     #[error("request send error")]
     RequestSendError(#[source] Arc<reqwest_middleware::Error>),
+    #[error("empty credential field: previous cred refresh failed")]
+    EmptyCredField,
+    #[error(transparent)]
+    LogoutEventEmissionError(#[from] LogoutEventEmissionError),
 }
 
 pub struct MainAuthenticator {
     refresh_worker: SingleParallelFlight<Result<(), MainAuthenticatorError>>,
     credentials: RwLock<Option<Credentials>>,
     credential_manager: CredentialManager,
+    logout_signaler: LogoutSignaler,
 }
 
 impl MainAuthenticator {
@@ -54,6 +60,7 @@ impl MainAuthenticator {
     pub async fn init(
         user_id: SynergiaUserId,
         portal_creds: PortalTokenPair,
+        logout_signaler: LogoutSignaler,
     ) -> Result<Self, MainAuthenticatorError> {
         let credential_manager = CredentialManager::try_new(user_id)
             .map_err(MainAuthenticatorError::CredentialManagerConstructionError)?;
@@ -65,6 +72,7 @@ impl MainAuthenticator {
             refresh_worker: SingleParallelFlight::new(),
             credentials: RwLock::new(Some(credentials)),
             credential_manager,
+            logout_signaler,
         };
         s.refresh().await?;
         Ok(s)
@@ -74,37 +82,41 @@ impl MainAuthenticator {
         self.refresh_worker
             .work(async || {
                 let mut cred_guard = self.credentials.write().await;
-                let creds = cred_guard.take().unwrap();
+                let creds = cred_guard
+                    .take()
+                    .ok_or(MainAuthenticatorError::EmptyCredField)?;
+                let creds_copy = creds.clone();
 
                 let synergia_creds = self
                     .credential_manager
                     .synergia()
-                    .refresh(creds.synergia.power_cookie.clone())
-                    .await;
+                    .refresh(creds.synergia.power_cookie.clone());
 
-                match synergia_creds {
-                    Ok(synergia_creds) => {
-                        *cred_guard = Some(Credentials {
+                *cred_guard = synergia_creds
+                    .and_then(|synergia_creds| async move {
+                        Ok(Some(Credentials {
                             synergia: synergia_creds,
                             ..creds
-                        });
-                    }
-                    Err(synergia_err) => {
-                        error!("synergia refresh failed: {synergia_err:?}");
-                        let creds =
-                            self.credential_manager
-                                .full_refresh(creds)
-                                .await
-                                .map_err(|e| {
-                                    MainAuthenticatorError::FatalCredentialRefreshError(
-                                        e,
-                                        synergia_err,
-                                    )
-                                })?;
-                        *cred_guard = Some(creds);
-                    }
-                };
-
+                        }))
+                    })
+                    .or_else(|err| async move {
+                        error!("synergia refresh failed: {err:?}");
+                        let creds = self
+                            .credential_manager
+                            .full_refresh(creds_copy)
+                            .await
+                            .map_err(|e| {
+                                MainAuthenticatorError::FatalCredentialRefreshError(e, err)
+                            })?;
+                        Ok(Some(creds))
+                    })
+                    .or_else(|err: MainAuthenticatorError| async move {
+                        error!("{err:?}");
+                        self.logout_signaler.send_logout_event()?;
+                        Ok::<_, MainAuthenticatorError>(None)
+                    })
+                    .await
+                    .unwrap_or(None);
                 Ok(())
             })
             .await?;

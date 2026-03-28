@@ -37,6 +37,7 @@ use crate::{
         users::Users,
     },
     stateful_result,
+    sync::LogoutSignaler,
 };
 
 mod events;
@@ -96,9 +97,10 @@ impl AuthenticatedState {
     async fn init(
         user_id: SynergiaUserId,
         portal_creds: PortalTokenPair,
+        logout_signaler: LogoutSignaler,
     ) -> Result<Self, StatefulError<(SynergiaUserId, PortalTokenPair), StateInitError>> {
         let main_authenticator = stateful_result! { (user_id, portal_creds) =>
-            MainAuthenticator::init(user_id, portal_creds.clone())
+            MainAuthenticator::init(user_id, portal_creds.clone(), logout_signaler)
                     .await
                     .map(Arc::new)
                     .map_err(StateInitError::MainAuthenticatorInitError)
@@ -160,9 +162,10 @@ impl SynergiaApi<AuthenticatedState> {
     pub async fn init(
         user_id: SynergiaUserId,
         portal_creds: PortalTokenPair,
+        logout_signaler: LogoutSignaler,
     ) -> Result<Self, StatefulError<(SynergiaUserId, PortalTokenPair), Error>> {
         Ok(Self {
-            state: AuthenticatedState::init(user_id, portal_creds)
+            state: AuthenticatedState::init(user_id, portal_creds, logout_signaler)
                 .await
                 .map_stateful_err(Error::StateInitError)?,
         })

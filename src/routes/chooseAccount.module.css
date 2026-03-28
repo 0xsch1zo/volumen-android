@@ -1,14 +1,13 @@
 .container {
-    /* TODO: make a separate prefix for the heights */
-    min-height: 100dvh;
-    max-height: 100dvh;
-    min-width: 100dvw;
-    max-width: 100dvw;
     display: flex;
     justify-content: center;
     align-items: center;
     flex-direction: column;
     background-color: inherit;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    min-width: 100dvw;
+    max-width: 100dvw;
 }
 
 .heading {
