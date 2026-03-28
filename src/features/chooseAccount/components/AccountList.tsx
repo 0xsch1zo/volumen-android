@@ -1,9 +1,6 @@
 import { M3eAvatar } from "@m3e/react/avatar"
 import { M3eCard } from "@m3e/react/card"
 import { M3eHeading } from "@m3e/react/heading"
-import { M3eIconButton } from "@m3e/react/icon-button"
-import { useNavigate } from "react-router"
-import { selectAccount } from "../api"
 import { Account } from "../types"
 import styles from "./AccountsList.module.css"
 import chevronRight from "../assets/chevron_right.svg";
