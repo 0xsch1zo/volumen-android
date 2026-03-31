@@ -13,6 +13,7 @@ mod net;
 mod repositories;
 mod state;
 mod sync;
+mod utils;
 
 // TODO: ENABLE COMPRESSION ON RELEASE
 

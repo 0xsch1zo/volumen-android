@@ -1,9 +1,11 @@
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
-    error::{ApplicationResultExt, LoggedApplicationResultExt, StatefulResultExt},
+    error::{
+        ApplicationError, ApplicationResultExt, LoggedApplicationResultExt, StatefulResultExt,
+    },
     repositories::account_selection::{SynergiaAccount, SynergiaUserId},
-    state::{AccountSelectionState, AppStates, AuthenticatedState, UnauthenticatedState},
+    state::{AccountSelectionState, AppStates, StateTransitionError, UnauthenticatedState},
     sync::LogoutSignaler,
     Result,
 };
@@ -17,8 +19,8 @@ pub async fn login(state: State<'_, AppStates>, login: String, password: String)
                 .login_repo
                 .login(login, password)
                 .await
-                .map_err_state(UnauthenticatedState::new)
-                .map_stateful_err(Into::into)?;
+                .map_err_state(UnauthenticatedState::from_repo)
+                .map_stateful_err(StateTransitionError::LoginError)?;
             Ok(AccountSelectionState::new(account_selection_repo))
         })
         .await
@@ -30,19 +32,18 @@ pub async fn login(state: State<'_, AppStates>, login: String, password: String)
 #[tauri::command]
 pub async fn accounts(app_handle: AppHandle) -> Result<Vec<SynergiaAccount>> {
     let logout_signaler = LogoutSignaler::new(app_handle.clone());
-    logout_signaler.send_logout_event();
     let state = app_handle.state::<AppStates>();
     let state_lock = state.lock().await;
     let state = state_lock
         .as_state::<AccountSelectionState>()
-        .into_app_result()
+        .map_err(ApplicationError::StateAquisitionError)
         .log_on_err()?;
 
     let accounts = state
         .account_selection_repo
         .accounts(logout_signaler)
         .await
-        .into_app_result()
+        .map_err(ApplicationError::AccountListQueryError)
         .log_on_err()?;
     Ok(accounts)
 }
@@ -51,7 +52,7 @@ pub async fn accounts(app_handle: AppHandle) -> Result<Vec<SynergiaAccount>> {
 pub async fn select_account(app_handle: AppHandle, user_id: SynergiaUserId) -> Result<()> {
     let logout_signaler = LogoutSignaler::new(app_handle.clone());
     logout_signaler.send_logout_event();
-    let state = app_handle.state::<AppStates>();
+    /*let state = app_handle.state::<AppStates>();
     let mut state_lock = state.lock().await;
     state_lock
         .state_transition::<AccountSelectionState, AuthenticatedState>(async |s| {
@@ -65,6 +66,6 @@ pub async fn select_account(app_handle: AppHandle, user_id: SynergiaUserId) -> R
         })
         .await
         .into_app_result()
-        .log_on_err()?;
+        .log_on_err()?;*/
     Ok(())
 }

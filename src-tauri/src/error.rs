@@ -4,23 +4,20 @@ use log::error;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::repositories;
+use crate::{
+    repositories,
+    state::{self, StateTransitionError},
+};
 
 // TODO: I need better errors here
 #[derive(Error, Debug)]
 pub enum ApplicationError {
-    #[error("account selection repository error")]
-    AccountSelectionRepoError(#[from] repositories::account_selection::Error),
-    #[error("login repository error")]
-    LoginRepoError(#[from] repositories::login::Error),
-    #[error("events repository error")]
-    EvnetsRepoError(#[from] repositories::events::Error),
-    #[error("sent messages repository error")]
-    SentMessagesRepoError(#[from] repositories::messages::sent::Error),
-    #[error("timetable repository error")]
-    TimetableRepository(#[from] repositories::timetable::Error),
-    #[error("wanted to aquire wrong state: {0}")]
-    WrongState(String),
+    #[error("failed to list synergia accounts")]
+    AccountListQueryError(#[source] repositories::account_selection::Error),
+    #[error("state aquisition failed")]
+    StateAquisitionError(#[source] state::Error),
+    #[error("state transition failed")]
+    StateTransitionError(#[from] StateTransitionError),
 }
 
 trait ErrorChainExt: StdError {

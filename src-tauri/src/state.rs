@@ -3,10 +3,28 @@ use std::{
     fmt::Debug,
 };
 
+use thiserror::Error;
+
 use crate::{
-    error::{ApplicationError, StatefulError},
-    repositories::{AccountSelectionRepository, LoginRepository, MainRepository},
+    error::StatefulError,
+    repositories::{self, login, AccountSelectionRepository, LoginRepository, MainRepository},
 };
+
+#[derive(Error, Debug)]
+pub enum StateTransitionError {
+    #[error("encountered error while logging in")]
+    LoginError(#[source] login::Error),
+    #[error("wanted to aquire wrong state: {0}")]
+    WrongState(String),
+}
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("wanted to aquire wrong state: {0}")]
+    WrongState(String),
+    #[error("initial state construction error")]
+    InitialStateConstructionError(#[source] repositories::login::Error),
+}
 
 pub trait AppState: Debug + Any + Send + Sync + 'static {
     // Necessary for the compiler to allow us to transform trait to any thanks to dynamic dispatch
@@ -19,7 +37,13 @@ pub struct UnauthenticatedState {
 }
 
 impl UnauthenticatedState {
-    pub fn new(login_repo: LoginRepository) -> Self {
+    pub fn try_new() -> Result<Self, Error> {
+        Ok(Self {
+            login_repo: LoginRepository::try_new().map_err(Error::InitialStateConstructionError)?,
+        })
+    }
+
+    pub fn from_repo(login_repo: LoginRepository) -> Self {
         Self { login_repo }
     }
 }
@@ -69,32 +93,34 @@ impl AppState for AuthenticatedState {
 pub struct AppStatesInner(Option<Box<dyn AppState>>);
 
 impl AppStatesInner {
-    pub fn try_new() -> Result<Self, ApplicationError> {
-        let state = Box::new(UnauthenticatedState::new(LoginRepository::try_new()?));
+    pub fn try_new() -> Result<Self, Error> {
+        let state = Box::new(UnauthenticatedState::try_new()?);
         Ok(Self(Some(state)))
     }
 
-    pub fn as_state<S: AppState>(&self) -> Result<&S, ApplicationError> {
+    pub fn as_state<S: AppState>(&self) -> Result<&S, Error> {
         let state = self.0.as_ref().unwrap();
 
         Ok(state
             .as_any()
             .downcast_ref()
-            .ok_or(ApplicationError::WrongState(
-                any::type_name::<S>().to_owned(),
-            ))?)
+            .ok_or(Error::WrongState(any::type_name::<S>().to_owned()))?)
     }
 
-    pub async fn state_transition<S: AppState, T: AppState>(
+    pub async fn state_transition<S, T>(
         &mut self,
-        transformer: impl AsyncFnOnce(S) -> Result<T, StatefulError<S, ApplicationError>>,
-    ) -> Result<(), ApplicationError> {
+        transformer: impl AsyncFnOnce(S) -> Result<T, StatefulError<S, StateTransitionError>>,
+    ) -> Result<(), StateTransitionError>
+    where
+        S: AppState,
+        T: AppState,
+    {
         let type_wanted = any::type_name::<S>().to_owned();
 
         let state = self.0.take().unwrap() as Box<dyn Any>;
         let state = *state
             .downcast::<S>()
-            .map_err(|_| ApplicationError::WrongState(type_wanted))?;
+            .map_err(|_| StateTransitionError::WrongState(type_wanted))?;
 
         match transformer(state).await {
             Ok(s) => {
@@ -102,9 +128,15 @@ impl AppStatesInner {
             }
             Err(e) => {
                 self.0 = Some(Box::new(e.state));
-                return Err(e.error);
+                return Err(e.error)?;
             }
         };
+        Ok(())
+    }
+
+    pub fn reset(&mut self) -> Result<(), Error> {
+        let state = Box::new(UnauthenticatedState::try_new()?);
+        self.0 = Some(state);
         Ok(())
     }
 }
