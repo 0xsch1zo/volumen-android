@@ -6,7 +6,6 @@ use crate::{
     },
     repositories::account_selection::{SynergiaAccount, SynergiaUserId},
     state::{AccountSelectionState, AppStates, StateTransitionError, UnauthenticatedState},
-    sync::LogoutSignaler,
     Result,
 };
 
@@ -31,7 +30,6 @@ pub async fn login(state: State<'_, AppStates>, login: String, password: String)
 
 #[tauri::command]
 pub async fn accounts(app_handle: AppHandle) -> Result<Vec<SynergiaAccount>> {
-    let logout_signaler = LogoutSignaler::new(app_handle.clone());
     let state = app_handle.state::<AppStates>();
     let state_lock = state.lock().await;
     let state = state_lock
@@ -41,7 +39,7 @@ pub async fn accounts(app_handle: AppHandle) -> Result<Vec<SynergiaAccount>> {
 
     let accounts = state
         .account_selection_repo
-        .accounts(logout_signaler)
+        .accounts()
         .await
         .map_err(ApplicationError::AccountListQueryError)
         .log_on_err()?;
@@ -50,8 +48,6 @@ pub async fn accounts(app_handle: AppHandle) -> Result<Vec<SynergiaAccount>> {
 
 #[tauri::command]
 pub async fn select_account(app_handle: AppHandle, user_id: SynergiaUserId) -> Result<()> {
-    let logout_signaler = LogoutSignaler::new(app_handle.clone());
-    logout_signaler.send_logout_event();
     /*let state = app_handle.state::<AppStates>();
     let mut state_lock = state.lock().await;
     state_lock

@@ -4,6 +4,7 @@ pub mod grades;
 pub mod login;
 pub mod main;
 pub mod messages;
+pub mod session;
 pub mod subjects;
 pub mod timetable;
 pub mod users;

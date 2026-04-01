@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
+use tauri::AppHandle;
 use thiserror::Error;
 
 use crate::{
     error::{StatefulError, StatefulResultExt},
     net::synergia_api::account_selector::{AccountSelector, AccountSelectorError},
     repositories::main::MainRepository,
-    sync::LogoutSignaler,
 };
 
 #[derive(Error, Debug)]
@@ -51,13 +51,10 @@ impl AccountSelectionRepository {
         Self { account_selector }
     }
 
-    pub async fn accounts(
-        &self,
-        logout_signaler: LogoutSignaler,
-    ) -> Result<SynergiaAccounts, Error> {
+    pub async fn accounts(&self) -> Result<SynergiaAccounts, Error> {
         Ok(self
             .account_selector
-            .accounts(&logout_signaler)
+            .accounts()
             .await
             .map_err(Error::AccountsFetchError)?)
     }
@@ -65,10 +62,9 @@ impl AccountSelectionRepository {
     pub async fn select(
         self,
         user_id: SynergiaUserId,
-        logout_signaler: LogoutSignaler,
     ) -> Result<MainRepository, StatefulError<Self, Error>> {
         self.account_selector
-            .select(user_id, logout_signaler)
+            .select(user_id)
             .await
             .map(MainRepository::new)
             .map_err_state(AccountSelectionRepository::new)

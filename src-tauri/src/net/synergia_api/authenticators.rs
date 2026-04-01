@@ -22,8 +22,14 @@ use crate::{
         },
         RequestCookieExt, RequestCookieExtError,
     },
-    sync::{LogoutEventEmissionError, LogoutSignaler, SingleParallelFlight},
+    sync::SingleParallelFlight,
 };
+
+#[derive(Debug, Clone, Copy)]
+pub enum SessionState {
+    Authenticated,
+    Unauthenticated,
+}
 
 #[derive(Error, Clone, Debug)]
 pub enum MainAuthenticatorError {
@@ -44,15 +50,15 @@ pub enum MainAuthenticatorError {
     RequestSendError(#[source] Arc<reqwest_middleware::Error>),
     #[error("empty credential field: previous cred refresh failed")]
     EmptyCredField,
-    #[error(transparent)]
-    LogoutEventEmissionError(#[from] LogoutEventEmissionError),
+    // #[error(transparent)]
+    // SessionStateUpdateError(#[from] StateUpdateError<SessionState>),
 }
 
+#[derive(Debug)]
 pub struct MainAuthenticator {
     refresh_worker: SingleParallelFlight<Result<(), MainAuthenticatorError>>,
     credentials: RwLock<Option<Credentials>>,
     credential_manager: CredentialManager,
-    logout_signaler: LogoutSignaler,
 }
 
 impl MainAuthenticator {
@@ -60,7 +66,6 @@ impl MainAuthenticator {
     pub async fn init(
         user_id: SynergiaUserId,
         portal_creds: PortalTokenPair,
-        logout_signaler: LogoutSignaler,
     ) -> Result<Self, MainAuthenticatorError> {
         let credential_manager = CredentialManager::try_new(user_id)
             .map_err(MainAuthenticatorError::CredentialManagerConstructionError)?;
@@ -72,9 +77,7 @@ impl MainAuthenticator {
             refresh_worker: SingleParallelFlight::new(),
             credentials: RwLock::new(Some(credentials)),
             credential_manager,
-            logout_signaler,
         };
-        s.refresh().await?;
         Ok(s)
     }
 
@@ -92,31 +95,27 @@ impl MainAuthenticator {
                     .synergia()
                     .refresh(creds.synergia.power_cookie.clone());
 
-                *cred_guard = synergia_creds
-                    .and_then(|synergia_creds| async move {
-                        Ok(Some(Credentials {
-                            synergia: synergia_creds,
-                            ..creds
-                        }))
-                    })
-                    .or_else(|err| async move {
-                        error!("synergia refresh failed: {err:?}");
-                        let creds = self
-                            .credential_manager
-                            .full_refresh(creds_copy)
-                            .await
-                            .map_err(|e| {
-                                MainAuthenticatorError::FatalCredentialRefreshError(e, err)
-                            })?;
-                        Ok(Some(creds))
-                    })
-                    .or_else(|err: MainAuthenticatorError| async move {
-                        error!("{err:?}");
-                        self.logout_signaler.send_logout_event()?;
-                        Ok::<_, MainAuthenticatorError>(None)
-                    })
-                    .await
-                    .unwrap_or(None);
+                *cred_guard = Some(
+                    synergia_creds
+                        .and_then(|synergia_creds| async move {
+                            Ok(Credentials {
+                                synergia: synergia_creds,
+                                ..creds
+                            })
+                        })
+                        .or_else(|err| async move {
+                            error!("synergia refresh failed: {err:?}");
+                            let creds = self
+                                .credential_manager
+                                .full_refresh(creds_copy)
+                                .await
+                                .map_err(|e| {
+                                    MainAuthenticatorError::FatalCredentialRefreshError(e, err)
+                                })?;
+                            Ok::<_, MainAuthenticatorError>(creds)
+                        })
+                        .await?,
+                );
                 Ok(())
             })
             .await?;
