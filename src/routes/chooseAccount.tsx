@@ -2,17 +2,21 @@ import type { Route } from "./+types/chooseAccount"
 
 import { listAccounts } from "../features/chooseAccount/api";
 import AccountList from "../features/chooseAccount/components/AccountList";
-import { Account } from "../features/chooseAccount/types.ts";
+import { Account } from "../types.ts";
 import { M3eHeading } from "@m3e/react/heading";
 import GeometricBackground from "../components/GeometricBackground.tsx";
 import styles from "./chooseAccount.module.css"
+import { queryClient } from "../root.tsx";
 
 type LoaderData = {
     accounts: Array<Account>
 }
 
 async function clientLoader(): Promise<LoaderData> {
-    return { accounts: await listAccounts() }
+    const accounts = await queryClient.fetchQuery({
+        queryFn: listAccounts,
+    })
+    return { accounts }
 }
 
 function ChooseAccountPage({
