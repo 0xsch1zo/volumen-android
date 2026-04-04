@@ -14,6 +14,8 @@ use crate::{
 pub enum ApplicationError {
     #[error("failed to list synergia accounts")]
     AccountListQueryError(#[source] repositories::account_selection::Error),
+    #[error("failed to list grades")]
+    GradeListQueryError(#[source] repositories::grades::Error),
     #[error("state aquisition failed")]
     StateAquisitionError(#[source] state::Error),
     #[error("state transition failed")]

@@ -7,7 +7,7 @@ async function listAccounts(): Promise<Array<Account>> {
 }
 
 async function selectAccount(account: Account): Promise<void> {
-    return await invoke("select_account", { id: account.id })
+    return await invoke("select_account", { userId: account.id })
 }
 
 export {

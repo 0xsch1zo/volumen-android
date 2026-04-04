@@ -14,6 +14,7 @@ type LoaderData = {
 
 async function clientLoader(): Promise<LoaderData> {
     const accounts = await queryClient.fetchQuery({
+        queryKey: ["listAccounts"],
         queryFn: listAccounts,
     })
     return { accounts }

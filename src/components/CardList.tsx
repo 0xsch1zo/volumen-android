@@ -7,7 +7,7 @@ type ItemProps = {
     title: string,
     subtitle: string,
     trailing?: React.ReactNode
-    onAction?: () => {},
+    onAction?: () => void,
 }
 
 function Item({ leading, title, subtitle, trailing, onAction }: ItemProps) {
@@ -17,7 +17,12 @@ function Item({ leading, title, subtitle, trailing, onAction }: ItemProps) {
             className={style.item}
             variant="outlined"
             actionable
-            onClick={onAction}
+            onClick={() => {
+                if (onAction !== undefined) {
+                    onAction()
+                }
+            }
+            }
         >
             <div className={style.card}>
                 <div className={style.left}>
@@ -41,14 +46,14 @@ function Item({ leading, title, subtitle, trailing, onAction }: ItemProps) {
 
 interface DistinctItem {
     id: number,
-    elements: ItemProps,
+    props: ItemProps,
 }
 
 function CardList({ items }: { items: Array<DistinctItem> }) {
     return (
         <div className={style.list}>
             {items.map(i => {
-                return <Item key={i.id} {...i.elements} />
+                return <Item key={i.id} {...i.props} />
             })}
         </div>
     )

@@ -1,11 +1,18 @@
-use tauri::{AppHandle, Manager, State};
+use futures::TryFutureExt;
+use tauri::State;
 
 use crate::{
     error::{
         ApplicationError, ApplicationResultExt, LoggedApplicationResultExt, StatefulResultExt,
     },
-    repositories::account_selection::{SynergiaAccount, SynergiaUserId},
-    state::{AccountSelectionState, AppStates, StateTransitionError, UnauthenticatedState},
+    repositories::{
+        account_selection::{SynergiaAccount, SynergiaUserId},
+        grades::Grade,
+    },
+    state::{
+        AccountSelectionState, AppStates, AuthenticatedState, StateTransitionError,
+        UnauthenticatedState,
+    },
     Result,
 };
 
@@ -29,8 +36,7 @@ pub async fn login(state: State<'_, AppStates>, login: String, password: String)
 }
 
 #[tauri::command]
-pub async fn accounts(app_handle: AppHandle) -> Result<Vec<SynergiaAccount>> {
-    let state = app_handle.state::<AppStates>();
+pub async fn accounts(state: State<'_, AppStates>) -> Result<Vec<SynergiaAccount>> {
     let state_lock = state.lock().await;
     let state = state_lock
         .as_state::<AccountSelectionState>()
@@ -47,21 +53,36 @@ pub async fn accounts(app_handle: AppHandle) -> Result<Vec<SynergiaAccount>> {
 }
 
 #[tauri::command]
-pub async fn select_account(app_handle: AppHandle, user_id: SynergiaUserId) -> Result<()> {
-    /*let state = app_handle.state::<AppStates>();
+pub async fn select_account(state: State<'_, AppStates>, user_id: SynergiaUserId) -> Result<()> {
     let mut state_lock = state.lock().await;
     state_lock
         .state_transition::<AccountSelectionState, AuthenticatedState>(async |s| {
             Ok(AuthenticatedState::new(
                 s.account_selection_repo
-                    .select(user_id, logout_signaler)
+                    .select(user_id)
                     .await
                     .map_err_state(AccountSelectionState::new)
-                    .map_stateful_err(Into::into)?,
+                    .map_stateful_err(StateTransitionError::AcccountSelectionError)?,
             ))
         })
         .await
         .into_app_result()
-        .log_on_err()?;*/
+        .log_on_err()?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn grades_list(state: State<'_, AppStates>) -> Result<Vec<Grade>> {
+    let state_lock = state.lock().await;
+    let state = state_lock
+        .as_state::<AuthenticatedState>()
+        .map_err(ApplicationError::StateAquisitionError)
+        .log_on_err()?;
+    Ok(state
+        .app_repositories
+        .grades()
+        .list()
+        .map_err(ApplicationError::GradeListQueryError)
+        .await
+        .log_on_err()?)
 }

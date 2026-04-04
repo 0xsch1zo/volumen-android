@@ -8,6 +8,7 @@ use crate::{error::FrontendError, state::AppStatesInner};
 mod cache;
 mod commands;
 mod common;
+mod domain;
 mod error;
 mod net;
 mod repositories;
@@ -62,6 +63,7 @@ pub fn run() {
             commands::login,
             commands::accounts,
             commands::select_account,
+            commands::grades_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
