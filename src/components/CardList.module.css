@@ -1,0 +1,34 @@
+.list {
+    display: flex;
+    flex-direction: column;
+}
+
+.item {
+    margin: 0.5rem 0rem;
+}
+
+.card {
+    padding: 1rem;
+    padding-right: 0.5rem;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.left {
+    display: flex;
+    flex-direction: row;
+}
+
+.content {
+    margin: 0rem 1rem;
+    gap: 0.25rem;
+}
+
+.subtitle {
+    margin: 0rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
