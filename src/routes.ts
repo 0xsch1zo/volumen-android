@@ -2,6 +2,7 @@ import {
     index,
     layout,
     route,
+    RouteConfig,
 } from "@react-router/dev/routes";
 
 export default [
@@ -12,4 +13,4 @@ export default [
             route("home", "./routes/home.tsx")
         ]),
     ])
-]
+] satisfies RouteConfig

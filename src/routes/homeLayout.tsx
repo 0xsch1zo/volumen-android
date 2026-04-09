@@ -1,9 +1,9 @@
-import { useLocation } from "react-router";
+import { Outlet, useLocation } from "react-router";
 import AppBar from "../features/nav/components/AppBar";
 import { Account } from "../types";
 import NavBar from "../features/nav/components/NavBar";
 
-function HomeLayout({ children }: { children: React.ReactNode }) {
+function HomeLayout({ }: { children: React.ReactNode }) {
     const state = useLocation().state
     if (state === undefined)
         throw Error("account undefined in home layout(not received through useLocation or incorrect type)")
@@ -11,7 +11,7 @@ function HomeLayout({ children }: { children: React.ReactNode }) {
     return (
         <>
             <AppBar account={account} />
-            {children}
+            <Outlet />
             <NavBar />
         </>
     )

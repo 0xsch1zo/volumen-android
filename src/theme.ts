@@ -39,7 +39,6 @@ function applyDefaultTheme() {
     const scheme = new SchemeTonalSpot(color, isDark, 0)
     for (const key in MaterialDynamicColors) {
         const dynamicColor = scheme[key as keyof SchemeTonalSpot];
-        console.log(typeof dynamicColor)
         if (!key.endsWith("PaletteKeyColor") && typeof dynamicColor === 'number') {
             document.documentElement.style.setProperty(
                 `--md-sys-color-${key.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase()}`,
