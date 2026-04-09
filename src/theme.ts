@@ -1,9 +1,10 @@
 import { M3 } from "tauri-plugin-m3";
 import {
-    themeFromSourceColor,
     argbFromHex,
-    applyTheme,
     hexFromArgb,
+    SchemeTonalSpot,
+    Hct,
+    MaterialDynamicColors,
 } from "@material/material-color-utilities";
 import { ColorScheme } from "tauri-plugin-m3";
 
@@ -31,14 +32,27 @@ function applyDynamicTheme(colorPalette: ColorScheme) {
 }
 
 function applyDefaultTheme() {
-    const theme = themeFromSourceColor(argbFromHex("#4285F4"));
-    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (isDark)
-        document.documentElement.style.setProperty("background-color", hexFromArgb(theme.schemes.dark.background))
-    else
-        document.documentElement.style.setProperty("background-color", hexFromArgb(theme.schemes.light.background))
+    const color = Hct.fromInt(argbFromHex("#4285F4"));
 
-    applyTheme(theme, { target: document.documentElement, dark: isDark })
+    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+    const scheme = new SchemeTonalSpot(color, isDark, 0)
+    for (const key in MaterialDynamicColors) {
+        const dynamicColor = scheme[key as keyof SchemeTonalSpot];
+        console.log(typeof dynamicColor)
+        if (!key.endsWith("PaletteKeyColor") && typeof dynamicColor === 'number') {
+            document.documentElement.style.setProperty(
+                `--md-sys-color-${key.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase()}`,
+                hexFromArgb(dynamicColor)
+            )
+        }
+    }
+
+    if (isDark)
+        document.documentElement.style.setProperty("background-color", hexFromArgb(scheme.background))
+    else
+        document.documentElement.style.setProperty("background-color", hexFromArgb(scheme.background))
+
 }
 
 export default initTheme;
