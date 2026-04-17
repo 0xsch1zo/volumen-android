@@ -4,6 +4,7 @@ import { M3eHeading } from "@m3e/react/heading";
 import { M3eIconButton } from "@m3e/react/icon-button";
 import { Account } from "../../../types";
 import menuSvg from "../assets//menu.svg"
+import style from "./AppBar.module.css"
 
 function AppBar({ account }: { account: Account }) {
     if (account.student_name.length == 0)
@@ -11,8 +12,11 @@ function AppBar({ account }: { account: Account }) {
     const monogram = account.student_name.charAt(0)
 
     return (
-        <M3eAppBar>
-            <M3eIconButton slot="leading-icon">
+        <M3eAppBar className={style.appBar}>
+            <M3eIconButton
+                slot="leading-icon"
+                className={style.menuIcon}
+            >
                 <img src={menuSvg} />
             </M3eIconButton>
             <M3eHeading

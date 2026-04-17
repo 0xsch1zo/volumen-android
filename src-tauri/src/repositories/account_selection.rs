@@ -5,7 +5,7 @@ use thiserror::Error;
 use crate::{
     error::{StatefulError, StatefulResultExt},
     net::synergia_api::account_selector::{AccountSelector, AccountSelectorError},
-    repositories::main::MainRepository,
+    repositories::AppRepositories,
 };
 
 #[derive(Error, Debug)]
@@ -30,7 +30,7 @@ impl SynergiaUserId {
     }
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SynergiaAccount {
     pub id: SynergiaUserId,
     pub group: String,
@@ -61,12 +61,13 @@ impl AccountSelectionRepository {
 
     pub async fn select(
         self,
-        user_id: SynergiaUserId,
-    ) -> Result<MainRepository, StatefulError<Self, Error>> {
+        account: SynergiaAccount,
+        app_handle: AppHandle,
+    ) -> Result<AppRepositories, StatefulError<Self, Error>> {
         self.account_selector
-            .select(user_id)
+            .select(account.id)
             .await
-            .map(MainRepository::new)
+            .map(|api| AppRepositories::new(api, account, app_handle))
             .map_err_state(AccountSelectionRepository::new)
             .map_stateful_err(Error::AccountSelectError)
     }

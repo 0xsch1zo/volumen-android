@@ -7,13 +7,15 @@ use thiserror::Error;
 
 use crate::{
     error::StatefulError,
-    repositories::{self, login, AccountSelectionRepository, LoginRepository, MainRepository},
+    repositories::{self, login, AccountSelectionRepository, AppRepositories, LoginRepository},
 };
 
 #[derive(Error, Debug)]
 pub enum StateTransitionError {
     #[error("encountered error while logging in")]
     LoginError(#[source] login::Error),
+    #[error("account selection error")]
+    AcccountSelectionError(#[source] repositories::account_selection::Error),
     #[error("wanted to aquire wrong state: {0}")]
     WrongState(String),
 }
@@ -63,12 +65,12 @@ impl AccountSelectionState {
 
 #[derive(Debug)]
 pub struct AuthenticatedState {
-    pub main_repository: MainRepository,
+    pub app_repositories: AppRepositories,
 }
 
 impl AuthenticatedState {
-    pub fn new(main_repository: MainRepository) -> Self {
-        Self { main_repository }
+    pub fn new(app_repositories: AppRepositories) -> Self {
+        Self { app_repositories }
     }
 }
 

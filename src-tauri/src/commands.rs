@@ -1,14 +1,11 @@
 use futures::TryFutureExt;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::{
     error::{
         ApplicationError, ApplicationResultExt, LoggedApplicationResultExt, StatefulResultExt,
     },
-    repositories::{
-        account_selection::{SynergiaAccount, SynergiaUserId},
-        grades::Grade,
-    },
+    repositories::{account_selection::SynergiaAccount, grades::Grade},
     state::{
         AccountSelectionState, AppStates, AuthenticatedState, StateTransitionError,
         UnauthenticatedState,
@@ -53,13 +50,14 @@ pub async fn accounts(state: State<'_, AppStates>) -> Result<Vec<SynergiaAccount
 }
 
 #[tauri::command]
-pub async fn select_account(state: State<'_, AppStates>, user_id: SynergiaUserId) -> Result<()> {
+pub async fn select_account(app_handle: AppHandle, account: SynergiaAccount) -> Result<()> {
+    let state = app_handle.state::<AppStates>();
     let mut state_lock = state.lock().await;
     state_lock
         .state_transition::<AccountSelectionState, AuthenticatedState>(async |s| {
             Ok(AuthenticatedState::new(
                 s.account_selection_repo
-                    .select(user_id)
+                    .select(account, app_handle.clone())
                     .await
                     .map_err_state(AccountSelectionState::new)
                     .map_stateful_err(StateTransitionError::AcccountSelectionError)?,
@@ -85,4 +83,14 @@ pub async fn grades_list(state: State<'_, AppStates>) -> Result<Vec<Grade>> {
         .map_err(ApplicationError::GradeListQueryError)
         .await
         .log_on_err()?)
+}
+
+#[tauri::command]
+pub async fn current_account(state: State<'_, AppStates>) -> Result<SynergiaAccount> {
+    let state_lock = state.lock().await;
+    let state = state_lock
+        .as_state::<AuthenticatedState>()
+        .map_err(ApplicationError::StateAquisitionError)
+        .log_on_err()?;
+    Ok(state.app_repositories.session().current_account())
 }
