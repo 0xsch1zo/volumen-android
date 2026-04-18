@@ -1,0 +1,15 @@
+.screen {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    justify-items: stretch;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    min-width: 100dvw;
+    max-width: 100dvw;
+}
+
+
+.outletContainer {
+    flex-grow: 1;
+}

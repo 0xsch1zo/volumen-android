@@ -1,0 +1,7 @@
+.dashboardContainer {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    padding: 0rem 2rem;
+    overflow: scroll;
+}

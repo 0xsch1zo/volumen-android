@@ -9,7 +9,7 @@ export default [
     layout("./routes/theme.tsx", [
         index("./routes/login.tsx"),
         route("choose-account", "./routes/chooseAccount.tsx"),
-        layout("./routes/homeLayout.tsx", [
+        layout("./routes/appLayout.tsx", [
             route("home", "./routes/home.tsx")
         ]),
     ])

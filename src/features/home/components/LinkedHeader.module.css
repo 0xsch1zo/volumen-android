@@ -1,0 +1,10 @@
+.headerContainer {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.header {
+    color: var(--md-sys-color-on-surface);
+    margin-right: 0.5rem;
+}
