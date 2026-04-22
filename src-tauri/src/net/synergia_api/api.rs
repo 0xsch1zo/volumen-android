@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 pub mod auth;
+pub mod calendar;
 pub mod events;
 pub mod grades;
+pub mod me;
 pub mod messages;
 pub mod subjects;
 pub mod timetable;

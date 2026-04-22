@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -15,7 +16,7 @@ pub enum Error {
     CategoryNotFound,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Serialize, Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct CategoryId(usize);
 
 impl CategoryId {
@@ -24,7 +25,7 @@ impl CategoryId {
     }
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Serialize, Debug, Clone, Hash)]
 pub struct Category {
     pub id: CategoryId,
     pub name: String,
@@ -36,7 +37,7 @@ impl Keyable<CategoryId> for Category {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CategoriesRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
     cache: AutoKeyedCache<CategoryId, Category>,
