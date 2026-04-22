@@ -80,7 +80,7 @@ pub struct Timetable {
     pub timetable: Vec<Day>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TimetableRepository {
     cache: AutoKeyedCache<Date, Day>,
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,

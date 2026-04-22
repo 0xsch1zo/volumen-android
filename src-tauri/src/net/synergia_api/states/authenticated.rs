@@ -11,6 +11,8 @@ use crate::{
         synergia_api::{
             api::{
                 auth::{PortalTokenPair, SynergiaUserId},
+                calendar::CalendarResponse,
+                me::MeResponse,
                 messages::MessageModelConversionError,
                 subjects::SubjectsResponse,
                 timetable,
@@ -32,6 +34,8 @@ use crate::{
         SynergiaApi,
     },
     repositories::{
+        calendar::{Calendar, Month, Year},
+        session::{ClassId, Me},
         subjects::Subjects,
         timetable::{Timetable, WeekStart},
         users::Users,
@@ -130,7 +134,14 @@ enum AuthenticatedSynergiaEndpoints {
     Subjects,
     Grades(GradesEndpoints),
     Messages(MessagesEndpoints),
-    Timetable { week_start: String },
+    Timetable {
+        week_start: String,
+    },
+    Calendar {
+        class_id: usize,
+        year: u32,
+        month: u8,
+    },
     Events(EventsEndpoints),
 }
 
@@ -147,6 +158,16 @@ impl AuthenticatedSynergiaEndpoints {
             AuthenticatedSynergiaEndpoints::Timetable { week_start } => SYNERGIA_URL
                 .join(&format!(
                     "/gateway/api/2.0/Timetables?weekStart={week_start}"
+                ))
+                .unwrap(),
+            AuthenticatedSynergiaEndpoints::Calendar {
+                class_id,
+                year,
+                month,
+            } => SYNERGIA_URL
+                .join(&format!(
+                    "/gateway/api/2.0/Calendars/{}?year={}&month={}",
+                    class_id, year, month
                 ))
                 .unwrap(),
             AuthenticatedSynergiaEndpoints::Grades(grades) => grades.url(),
@@ -196,6 +217,14 @@ impl SynergiaApi<AuthenticatedState> {
         Ok(resource)
     }
 
+    pub async fn fetch_me(&self) -> Result<Me, Error> {
+        Ok(self
+            .fetch_synergia_endpoint::<MeResponse>(AuthenticatedSynergiaEndpoints::Me)
+            .await?
+            .me
+            .into())
+    }
+
     pub async fn fetch_users(&self) -> Result<Users, Error> {
         Ok(self
             .fetch_synergia_endpoint::<UsersResponse>(AuthenticatedSynergiaEndpoints::Users)
@@ -222,6 +251,23 @@ impl SynergiaApi<AuthenticatedState> {
             .map_err(|e| {
                 Error::ModelConversionError(ModelConversionError::TimetableConvError(e))
             })?)
+    }
+
+    pub async fn fetch_calendar(
+        &self,
+        class_id: ClassId,
+        year: Year,
+        month: Month,
+    ) -> Result<Calendar, Error> {
+        Ok(self
+            .fetch_synergia_endpoint::<CalendarResponse>(AuthenticatedSynergiaEndpoints::Calendar {
+                class_id: class_id.as_inner(),
+                year,
+                month,
+            })
+            .await?
+            .calendar
+            .into())
     }
 
     pub fn grades(&self) -> GradesManager<'_> {

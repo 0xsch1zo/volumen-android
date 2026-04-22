@@ -3,6 +3,7 @@ mod categories;
 use std::sync::Arc;
 
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -29,7 +30,7 @@ pub enum Error {
     SubjectFetchError(#[source] subjects::Error),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Debug, Clone)]
 pub struct EventId(usize);
 
 impl EventId {
@@ -55,7 +56,7 @@ pub struct ShallowEvent {
     pub add_date: String,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct Event {
     pub id: EventId,
     pub content: String,
@@ -101,6 +102,7 @@ impl<'a> EventFactory<'a> {
             .map(|s| self.subjects.subject(s).map_err(Error::SubjectFetchError));
         if let Some(subject_fut) = subject_fut {
             let (category, created_by, subject) =
+                // TODO: not parallel fix this using spawn
                 tokio::try_join!(category_fut, created_by_fut, subject_fut)?;
             Ok(Event {
                 category,
@@ -130,13 +132,13 @@ impl<'a> EventFactory<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct EventsRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
     cache: SingleEntryCache<Vec<ShallowEvent>>,
     categories: CategoriesRepository,
-    users: UsersRepository,
     subjects: SubjectsRepository,
+    users: UsersRepository,
 }
 
 impl EventsRepository {
@@ -148,9 +150,9 @@ impl EventsRepository {
         Self {
             synergia_api,
             categories,
-            users,
             subjects,
             cache: SingleEntryCache::new(),
+            users,
         }
     }
 
