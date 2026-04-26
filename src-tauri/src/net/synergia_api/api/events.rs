@@ -95,3 +95,10 @@ pub struct EventsResponse {
     #[serde(rename = "HomeWorks")]
     pub events: Vec<ShallowEvent>,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct EventResponse {
+    #[serde(rename = "HomeWork")]
+    pub event: ShallowEvent,
+}

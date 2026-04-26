@@ -1,15 +1,17 @@
 mod categories;
 
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
+use itertools::Itertools;
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
-    cache::{CacheComputeError, SingleEntryCache},
+    cache::{AutoKeyedCache, CacheComputeError, Keyable},
     net::{synergia_api::AuthenticatedState, SynergiaApi},
     repositories::{
+        calendar::Calendar,
         events::categories::CategoriesRepository,
         subjects::{self, Subject, SubjectId, SubjectsRepository},
         users::{self, User, UserId, UsersRepository},
@@ -22,6 +24,8 @@ pub use categories::{Category, CategoryId};
 pub enum Error {
     #[error("failed to fetch event list")]
     EventListFetchError(#[source] CacheComputeError),
+    #[error("failed to fetch event")]
+    EventFetchError(#[source] CacheComputeError),
     #[error("failed to fetch category")]
     CategoryFetchError(#[source] categories::Error),
     #[error("failed to fetch user")]
@@ -30,12 +34,16 @@ pub enum Error {
     SubjectFetchError(#[source] subjects::Error),
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EventId(usize);
 
 impl EventId {
     pub fn new(_0: usize) -> Self {
         Self(_0)
+    }
+
+    pub fn as_inner(&self) -> usize {
+        self.0
     }
 
     pub fn into_inner(self) -> usize {
@@ -56,7 +64,13 @@ pub struct ShallowEvent {
     pub add_date: String,
 }
 
-#[derive(Serialize, Debug)]
+impl Keyable<EventId> for ShallowEvent {
+    fn key(&self) -> EventId {
+        self.id
+    }
+}
+
+#[derive(Serialize, Clone, Debug)]
 pub struct Event {
     pub id: EventId,
     pub content: String,
@@ -135,7 +149,7 @@ impl<'a> EventFactory<'a> {
 #[derive(Clone, Debug)]
 pub struct EventsRepository {
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
-    cache: SingleEntryCache<Vec<ShallowEvent>>,
+    cache: AutoKeyedCache<EventId, ShallowEvent>,
     categories: CategoriesRepository,
     subjects: SubjectsRepository,
     users: UsersRepository,
@@ -151,19 +165,45 @@ impl EventsRepository {
             synergia_api,
             categories,
             subjects,
-            cache: SingleEntryCache::new(),
+            cache: AutoKeyedCache::new(),
             users,
         }
     }
 
     pub async fn list(&self) -> Result<Vec<Event>, Error> {
-        let shallow_events = self
-            .cache
-            .try_get_with(async { self.synergia_api.events().fetch_list().await })
+        self.cache
+            .try_bulk_insert_with(async { self.synergia_api.events().fetch_list().await })
             .await
             .map_err(Error::EventListFetchError)?;
 
+        let shallow_events = self.cache.iter().map(|(_, v)| v).collect_vec();
+
         let event_factory = EventFactory::new(&self.categories, &self.users, &self.subjects);
+
+        stream::iter(shallow_events)
+            .map(async |s| event_factory.create_from_shallow(s).await)
+            .buffer_unordered(10)
+            .try_collect::<Vec<_>>()
+            .await
+    }
+
+    pub async fn fetch_from_calendar<'a>(
+        &'a self,
+        calendar: Calendar,
+    ) -> Result<Vec<Event>, Error> {
+        let event_factory = EventFactory::new(&self.categories, &self.users, &self.subjects);
+        let shallow_events = stream::iter(calendar.events)
+            .map(async |id| {
+                self.cache
+                    .try_get_with(&id, async {
+                        self.synergia_api.events().fetch_event(id).await
+                    })
+                    .await
+                    .map_err(Error::EventFetchError)
+            })
+            .buffer_unordered(10)
+            .try_collect::<Vec<_>>()
+            .await?;
 
         stream::iter(shallow_events)
             .map(async |s| event_factory.create_from_shallow(s).await)

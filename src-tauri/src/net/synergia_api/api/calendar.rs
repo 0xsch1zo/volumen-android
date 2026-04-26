@@ -1,8 +1,11 @@
 use serde::Deserialize;
 
-use crate::{net::synergia_api::api::Reference, repositories::calendar as models};
+use crate::{
+    net::synergia_api::api::Reference,
+    repositories::{self, calendar as models},
+};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Clone, Copy, Debug)]
 #[serde(from = "Reference")]
 pub struct EventId(usize);
 
@@ -12,7 +15,7 @@ impl From<Reference> for EventId {
     }
 }
 
-impl From<EventId> for models::EventId {
+impl From<EventId> for repositories::events::EventId {
     fn from(value: EventId) -> Self {
         Self::new(value.0)
     }
@@ -34,6 +37,7 @@ impl From<Calendar> for models::Calendar {
 }
 
 #[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
 pub struct CalendarResponse {
     pub calendar: Calendar,
 }

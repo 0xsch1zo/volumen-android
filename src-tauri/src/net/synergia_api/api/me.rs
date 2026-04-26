@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::{net::synergia_api::api::Reference, repositories::session as models};
+use crate::{net::synergia_api::api::Reference, repositories::me as models};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "PascalCase")]

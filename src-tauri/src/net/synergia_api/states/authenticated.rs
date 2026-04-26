@@ -35,7 +35,7 @@ use crate::{
     },
     repositories::{
         calendar::{Calendar, Month, Year},
-        session::{ClassId, Me},
+        me::{ClassId, Me},
         subjects::Subjects,
         timetable::{Timetable, WeekStart},
         users::Users,
@@ -139,7 +139,7 @@ enum AuthenticatedSynergiaEndpoints {
     },
     Calendar {
         class_id: usize,
-        year: u32,
+        year: i32,
         month: u8,
     },
     Events(EventsEndpoints),
@@ -262,8 +262,8 @@ impl SynergiaApi<AuthenticatedState> {
         Ok(self
             .fetch_synergia_endpoint::<CalendarResponse>(AuthenticatedSynergiaEndpoints::Calendar {
                 class_id: class_id.as_inner(),
-                year,
-                month,
+                year: year.into_inner(),
+                month: month.into_inner(),
             })
             .await?
             .calendar

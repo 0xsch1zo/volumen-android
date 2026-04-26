@@ -8,6 +8,7 @@ use crate::{
     net::{synergia_api::AuthenticatedState, SynergiaApi},
     repositories::{
         self,
+        events::EventId,
         me::{ClassId, MeRepository},
     },
 };
@@ -21,38 +22,29 @@ pub enum Error {
 }
 
 #[derive(Serialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct EventId(usize);
-
-impl EventId {
-    pub fn new(_0: usize) -> Self {
-        Self(_0)
-    }
-}
-
-#[derive(Serialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct Year(usize);
+pub struct Year(i32);
 
 impl Year {
-    pub fn new(_0: usize) -> Self {
+    pub fn new(_0: i32) -> Self {
         Self(_0)
     }
 
-    fn into_inner(self) -> usize {
+    pub fn into_inner(self) -> i32 {
         self.0
     }
 }
 
 #[derive(Serialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct Month(usize);
+pub struct Month(u8);
 
 impl Month {
-    fn into_inner(self) -> usize {
+    pub fn into_inner(self) -> u8 {
         self.0
     }
 }
 
 impl Month {
-    pub fn new(_0: usize) -> Self {
+    pub fn new(_0: u8) -> Self {
         Self(_0)
     }
 }
@@ -66,11 +58,16 @@ pub struct CalendarKey {
 
 #[derive(Serialize, Debug, Clone)]
 pub struct Calendar {
-    pub key: CalendarKey,
     pub events: Vec<EventId>,
 }
 
-impl Keyable<CalendarKey> for Calendar {
+#[derive(Serialize, Debug, Clone)]
+pub struct KeyedCalendar {
+    pub key: CalendarKey,
+    pub calendar: Calendar,
+}
+
+impl Keyable<CalendarKey> for KeyedCalendar {
     fn key(&self) -> CalendarKey {
         self.key.clone()
     }
@@ -80,7 +77,7 @@ impl Keyable<CalendarKey> for Calendar {
 pub struct CalendarRepository {
     me_repo: MeRepository,
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
-    cache: AutoKeyedCache<CalendarKey, Calendar>,
+    cache: AutoKeyedCache<CalendarKey, KeyedCalendar>,
 }
 
 impl CalendarRepository {
@@ -93,21 +90,25 @@ impl CalendarRepository {
         }
     }
 
-    pub async fn calendar(
-        &self,
-        class: ClassId,
-        year: Year,
-        month: Month,
-    ) -> Result<Calendar, Error> {
+    pub async fn calendar(&self, year: Year, month: Month) -> Result<Calendar, Error> {
         let me = self.me_repo.me().await.map_err(Error::MeFetchError)?;
-        let key = CalendarKey { class, year, month };
+        let key = CalendarKey {
+            class: me.class,
+            year,
+            month,
+        };
         self.cache
             .try_get_with(&key, async {
                 self.synergia_api
                     .fetch_calendar(me.class, year, month)
                     .await
+                    .map(|calendar| KeyedCalendar {
+                        key: key.clone(),
+                        calendar,
+                    })
             })
             .await
+            .map(|c| c.calendar)
             .map_err(Error::CalendarFetchError)
     }
 }
