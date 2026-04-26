@@ -80,6 +80,10 @@ impl AppRepositories {
         &self.events
     }
 
+    pub fn calendar(&self) -> &CalendarRepository {
+        &self.calendar
+    }
+
     #[allow(unused)]
     pub fn session(&self) -> &SessionRepository {
         &self.session

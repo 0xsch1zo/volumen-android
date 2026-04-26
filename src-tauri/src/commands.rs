@@ -2,6 +2,7 @@ use futures::TryFutureExt;
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
+    domain::daily_timetable::DailyTimetable,
     error::{
         ApplicationError, ApplicationResultExt, LoggedApplicationResultExt, StatefulResultExt,
     },
@@ -93,4 +94,20 @@ pub async fn current_account(state: State<'_, AppStates>) -> Result<SynergiaAcco
         .map_err(ApplicationError::StateAquisitionError)
         .log_on_err()?;
     Ok(state.app_repositories.session().current_account())
+}
+
+#[tauri::command]
+pub async fn daily_timetable(state: State<'_, AppStates>) -> Result<DailyTimetable> {
+    let state_lock = state.lock().await;
+    let state = state_lock
+        .as_state::<AuthenticatedState>()
+        .map_err(ApplicationError::StateAquisitionError)
+        .log_on_err()?;
+
+    Ok(state
+        .app_usecases
+        .daily_timetable()
+        .await
+        .map_err(ApplicationError::DailyTimetableQueryError)
+        .log_on_err()?)
 }

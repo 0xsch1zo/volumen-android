@@ -44,3 +44,4 @@ keyring = { version = "3.6.3", features = ["sync-secret-service"] }
 base64 = "0.22.1"
 android_logger = "0.15.1"
 serde_with = "3.16.1"
+chrono = "0.4.44"

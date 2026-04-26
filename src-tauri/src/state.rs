@@ -6,6 +6,7 @@ use std::{
 use thiserror::Error;
 
 use crate::{
+    domain::AppUseCases,
     error::StatefulError,
     repositories::{self, login, AccountSelectionRepository, AppRepositories, LoginRepository},
 };
@@ -66,11 +67,15 @@ impl AccountSelectionState {
 #[derive(Debug)]
 pub struct AuthenticatedState {
     pub app_repositories: AppRepositories,
+    pub app_usecases: AppUseCases,
 }
 
 impl AuthenticatedState {
     pub fn new(app_repositories: AppRepositories) -> Self {
-        Self { app_repositories }
+        Self {
+            app_usecases: AppUseCases::new(app_repositories.clone()),
+            app_repositories,
+        }
     }
 }
 
