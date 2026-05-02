@@ -27,6 +27,8 @@ pub enum Error {
     EventFetchError(#[source] repositories::events::Error),
     #[error("failed to fetch calendar")]
     CalendarFetchError(#[source] repositories::calendar::Error),
+    #[error("failed to parse event or lesson time")]
+    TimeParseError(#[source] chrono::ParseError),
 }
 
 const YMD_FORMAT: &str = "%Y-%m-%d";
@@ -42,7 +44,7 @@ struct TimeBlock {
 #[derive(Serialize, Debug)]
 enum TimetableWhen {
     Today,
-    Tommorow,
+    Tomorrow,
     NextWeek,
 }
 
@@ -68,7 +70,7 @@ impl TimetableWhen {
 
         match (today.is_weekend(), todays_lessons.time_blocks.last()) {
             (true, _) => Ok(TimetableWhen::NextWeek),
-            (false, None) => Ok(TimetableWhen::Tommorow),
+            (false, None) => Ok(TimetableWhen::Tomorrow),
             (false, Some::<&repositories::timetable::TimeBlock>(last_timeblock))
                 if !last_timeblock.is_empty() =>
             {
@@ -85,10 +87,10 @@ impl TimetableWhen {
                 if current_time <= *last_lesson_end_time {
                     Ok(TimetableWhen::Today)
                 } else {
-                    Ok(TimetableWhen::Tommorow)
+                    Ok(TimetableWhen::Tomorrow)
                 }
             }
-            _ => Ok(TimetableWhen::Tommorow),
+            _ => Ok(TimetableWhen::Tomorrow),
         }
     }
 
@@ -176,11 +178,15 @@ fn trim_timetable_on_ends(time_blocks: Vec<Option<TimeBlock>>) -> Vec<Option<Tim
         .into_iter()
         .rev()
         .skip_while(|t| t.is_none())
+        .collect_vec()
+        .into_iter()
+        .rev()
         .collect()
 }
 
 pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<DailyTimetable, Error> {
-    let today = Local::now().date_naive();
+    // let today = Local::now().date_naive();
+    let today = NaiveDate::from_ymd_opt(2026, 04, 28).unwrap();
     let current_time = Local::now().time();
 
     let when = TimetableWhen::fetch_from_current_timetable(&app_repos, today, current_time).await?;
@@ -189,7 +195,7 @@ pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<Dail
 
     let timetable_date = match when {
         TimetableWhen::NextWeek => week_start,
-        TimetableWhen::Tommorow => today
+        TimetableWhen::Tomorrow => today
             .checked_add_days(Days::new(1))
             .ok_or(Error::TomorrowDateError)?,
         TimetableWhen::Today => today,
@@ -201,23 +207,64 @@ pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<Dail
     let daily_time_blocks = time_blocks
         .into_iter()
         .map(|time_block| {
-            let events = events
-                .iter()
-                .filter(|e| {
-                    time_block
-                        .first()
-                        .is_some_and(|t| e.time_from == t.hour_from && e.time_to == t.hour_to)
-                })
-                .cloned()
-                .collect_vec();
-            Some(TimeBlock {
-                start: time_block.first()?.hour_from.clone(),
-                end: time_block.first()?.hour_to.clone(),
+            Ok((
+                events
+                    .iter()
+                    .filter(|e| e.date == timetable_date.format(YMD_FORMAT).to_string())
+                    .filter_map(|e| -> Option<Result<&Event, chrono::ParseError>> {
+                        let time_from = match NaiveTime::parse_from_str(&e.time_from, "%H:%M:%S") {
+                            Ok(time_from) => time_from,
+                            Err(e) => return Some(Err(e)),
+                        };
+                        let time_to = match NaiveTime::parse_from_str(&e.time_to, "%H:%M:%S") {
+                            Ok(time_from) => time_from,
+                            Err(e) => return Some(Err(e)),
+                        };
+                        match time_block
+                            .first()
+                            .map(|t| {
+                                Ok::<_, chrono::ParseError>((
+                                    NaiveTime::parse_from_str(&t.hour_from, "%H:%M")?,
+                                    NaiveTime::parse_from_str(&t.hour_to, "%H:%M")?,
+                                ))
+                            })
+                            .transpose()
+                        {
+                            Ok(t) => t,
+                            Err(e) => return Some(Err(e)),
+                        }
+                        .and_then(
+                            |(timeblock_time_from, timeblock_time_to)| {
+                                if time_from == timeblock_time_from && time_to == timeblock_time_to
+                                {
+                                    Some(Ok(e))
+                                } else {
+                                    None
+                                }
+                            },
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(Error::TimeParseError)?
+                    .into_iter()
+                    .cloned()
+                    .collect_vec(),
+                time_block,
+            ))
+        })
+        .map(|data| {
+            let (events, time_block) = data?;
+            let Some(lesson) = time_block.first() else {
+                return Ok(None);
+            };
+            Ok(Some(TimeBlock {
+                start: lesson.hour_from.clone(),
+                end: lesson.hour_to.clone(),
                 subject: time_block.iter().map(|l| &l.subject.name).join(" | "),
                 events,
-            })
+            }))
         })
-        .collect_vec();
+        .collect::<Result<Vec<_>, _>>()?;
 
     let daily_time_blocks = trim_timetable_on_ends(daily_time_blocks);
 

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use itertools::Itertools;
+use log::debug;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -192,14 +193,16 @@ impl EventsRepository {
         let event_factory = EventFactory::new(&self.categories, &self.users, &self.subjects);
         let shallow_events = stream::iter(calendar.events)
             .map(async |id| {
-                self.cache
+                let event = self
+                    .cache
                     .try_get_with(&id, async {
                         self.synergia_api.events().fetch_event(id).await
                     })
                     .await
-                    .map_err(Error::EventFetchError)
+                    .map_err(Error::EventFetchError)?;
+                Ok(event)
             })
-            .buffer_unordered(10)
+            .buffered(10)
             .try_collect::<Vec<_>>()
             .await?;
 
