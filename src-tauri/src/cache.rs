@@ -123,6 +123,11 @@ impl<
     pub fn iter(&self) -> impl Iterator<Item = (Arc<K>, V)> + use<'_, K, V> {
         self.cache.iter()
     }
+
+    pub async fn size(&self) -> usize {
+        self.cache.run_pending_tasks().await;
+        self.cache.entry_count() as usize
+    }
 }
 
 #[derive(Debug, Clone)]

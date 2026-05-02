@@ -7,7 +7,7 @@ use crate::repositories::{
     self,
     calendar::{Month, Year},
     events::Event,
-    timetable::{Date, TimeBlocks, WeekStart},
+    timetable::{TimeBlocks, WeekStart},
     AppRepositories,
 };
 
@@ -61,9 +61,9 @@ impl TimetableWhen {
             .map_err(Error::TimetableFetchError)?;
 
         let todays_lessons = current_week_timetable
-            .timetable
+            .inner_timetable
             .iter()
-            .find(|day| day.date == Date::new(today.format(YMD_FORMAT).to_string()))
+            .find(|day| day.date == today.format(YMD_FORMAT).to_string())
             .ok_or(Error::LessonsForDateNotFound)?;
 
         match (today.is_weekend(), todays_lessons.time_blocks.last()) {
@@ -161,11 +161,22 @@ async fn fetch_timeblocks_of_day(
         .map_err(Error::TimetableFetchError)?;
 
     Ok(timetable
-        .timetable
+        .inner_timetable
         .into_iter()
-        .find(|day| day.date == Date::new(timetable_date.format(YMD_FORMAT).to_string()))
+        .find(|day| day.date == timetable_date.format(YMD_FORMAT).to_string())
         .ok_or(Error::LessonsForDateNotFound)?
         .time_blocks)
+}
+
+fn trim_timetable_on_ends(time_blocks: Vec<Option<TimeBlock>>) -> Vec<Option<TimeBlock>> {
+    time_blocks
+        .into_iter()
+        .skip_while(|t| t.is_none())
+        .collect_vec()
+        .into_iter()
+        .rev()
+        .skip_while(|t| t.is_none())
+        .collect()
 }
 
 pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<DailyTimetable, Error> {
@@ -207,6 +218,8 @@ pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<Dail
             })
         })
         .collect_vec();
+
+    let daily_time_blocks = trim_timetable_on_ends(daily_time_blocks);
 
     let day_of_week = timetable_date.format("%A").to_string();
 

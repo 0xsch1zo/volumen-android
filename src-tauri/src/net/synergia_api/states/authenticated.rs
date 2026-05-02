@@ -37,7 +37,7 @@ use crate::{
         calendar::{Calendar, Month, Year},
         me::{ClassId, Me},
         subjects::Subjects,
-        timetable::{Timetable, WeekStart},
+        timetable::{InnerTimetable, WeekStart},
         users::Users,
     },
     stateful_result,
@@ -239,7 +239,7 @@ impl SynergiaApi<AuthenticatedState> {
             .into())
     }
 
-    pub async fn fetch_timetable(&self, week_start: WeekStart) -> Result<Timetable, Error> {
+    pub async fn fetch_timetable(&self, week_start: WeekStart) -> Result<InnerTimetable, Error> {
         Ok(self
             .fetch_synergia_endpoint::<timetable::Timetable>(
                 AuthenticatedSynergiaEndpoints::Timetable {

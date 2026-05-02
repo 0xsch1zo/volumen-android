@@ -1,6 +1,6 @@
 mod categories;
 
-use std::{future::Future, sync::Arc};
+use std::sync::Arc;
 
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use itertools::Itertools;
@@ -40,10 +40,6 @@ pub struct EventId(usize);
 impl EventId {
     pub fn new(_0: usize) -> Self {
         Self(_0)
-    }
-
-    pub fn as_inner(&self) -> usize {
-        self.0
     }
 
     pub fn into_inner(self) -> usize {
@@ -171,10 +167,12 @@ impl EventsRepository {
     }
 
     pub async fn list(&self) -> Result<Vec<Event>, Error> {
-        self.cache
-            .try_bulk_insert_with(async { self.synergia_api.events().fetch_list().await })
-            .await
-            .map_err(Error::EventListFetchError)?;
+        if self.cache.size().await == 0 {
+            self.cache
+                .try_bulk_insert_with(async { self.synergia_api.events().fetch_list().await })
+                .await
+                .map_err(Error::EventListFetchError)?;
+        }
 
         let shallow_events = self.cache.iter().map(|(_, v)| v).collect_vec();
 

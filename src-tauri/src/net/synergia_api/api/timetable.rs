@@ -80,31 +80,26 @@ pub struct Timetable {
     timetable: HashMap<String, TimeBlocks>,
 }
 
-impl TryFrom<Timetable> for models::Timetable {
+impl TryFrom<Timetable> for models::InnerTimetable {
     type Error = ModelConversionError;
 
     fn try_from(value: Timetable) -> Result<Self, Self::Error> {
-        Ok(Self {
-            timetable: value
-                .timetable
-                .into_iter()
-                // yeah I know it looks like shit..., but I had to, sorry
-                .map(|(date, time_blocks)| {
-                    let time_blocks = time_blocks
-                        .into_iter()
-                        .map(|time_block| {
-                            time_block
-                                .into_iter()
-                                .map(|lesson| lesson.try_into())
-                                .collect::<Result<models::TimeBlock, _>>()
-                        })
-                        .collect::<Result<models::TimeBlocks, _>>()?;
-                    Ok(models::Day {
-                        date: models::Date::new(date),
-                        time_blocks,
+        Ok(value
+            .timetable
+            .into_iter()
+            // yeah I know it looks like shit..., but I had to, sorry
+            .map(|(date, time_blocks)| {
+                let time_blocks = time_blocks
+                    .into_iter()
+                    .map(|time_block| {
+                        time_block
+                            .into_iter()
+                            .map(|lesson| lesson.try_into())
+                            .collect::<Result<models::TimeBlock, _>>()
                     })
-                })
-                .collect::<Result<_, _>>()?,
-        })
+                    .collect::<Result<models::TimeBlocks, _>>()?;
+                Ok(models::Day { date, time_blocks })
+            })
+            .collect::<Result<_, _>>()?)
     }
 }

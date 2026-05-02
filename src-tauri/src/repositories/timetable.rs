@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use thiserror::Error;
-use tokio::sync::mpsc;
 
 use crate::{
     cache::{AutoKeyedCache, CacheComputeError, Keyable},
@@ -19,8 +18,7 @@ pub enum Error {
     TimetableFetchError(#[source] CacheComputeError),
 }
 
-// TODO: this has to change, we cannot require the frontend to figure out the date of the start of
-// the week
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WeekStart(String);
 
 impl WeekStart {
@@ -54,35 +52,29 @@ pub type TimeBlock = Vec<Lesson>;
 
 pub type TimeBlocks = Vec<TimeBlock>;
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Date(String);
-
-impl Date {
-    pub fn new(_0: String) -> Self {
-        Self(_0)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Day {
     pub time_blocks: TimeBlocks,
-    pub date: Date,
+    pub date: String,
 }
 
-impl Keyable<Date> for Day {
-    fn key(&self) -> Date {
-        self.date.clone()
-    }
-}
+pub type InnerTimetable = Vec<Day>;
 
 #[derive(Debug, Clone)]
 pub struct Timetable {
-    pub timetable: Vec<Day>,
+    pub inner_timetable: InnerTimetable,
+    pub week_start: WeekStart,
+}
+
+impl Keyable<WeekStart> for Timetable {
+    fn key(&self) -> WeekStart {
+        self.week_start.clone()
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct TimetableRepository {
-    cache: AutoKeyedCache<Date, Day>,
+    cache: AutoKeyedCache<WeekStart, Timetable>,
     synergia_api: Arc<SynergiaApi<AuthenticatedState>>,
 }
 
@@ -95,15 +87,18 @@ impl TimetableRepository {
     }
 
     pub async fn timetable(&self, week_start: WeekStart) -> Result<Timetable, Error> {
-        let (tx, mut rx) = mpsc::channel(1);
         self.cache
-            .try_bulk_insert_with(async {
-                let timetable = self.synergia_api.fetch_timetable(week_start).await?;
-                tx.send(timetable.clone()).await.unwrap();
-                Ok::<_, AuthenticatedSynergiaApiError>(timetable.timetable)
+            .try_get_with(&week_start, async {
+                let inner_timetable = self
+                    .synergia_api
+                    .fetch_timetable(week_start.clone())
+                    .await?;
+                Ok::<_, AuthenticatedSynergiaApiError>(Timetable {
+                    inner_timetable,
+                    week_start: week_start.clone(),
+                })
             })
             .await
-            .map_err(Error::TimetableFetchError)?;
-        Ok(rx.recv().await.unwrap())
+            .map_err(Error::TimetableFetchError)
     }
 }
