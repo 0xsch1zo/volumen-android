@@ -27,8 +27,6 @@ pub struct AutoKeyedCache<
     V: Send + Sync + Clone + Keyable<K> + 'static,
 > {
     cache: Cache<K, V>,
-    get_with_worker: Arc<SingleParallelFlight<V>>,
-    try_get_with_worker: Arc<SingleParallelFlight<Result<V, CacheComputeError>>>,
     bulk_insert_worker: Arc<SingleParallelFlight<()>>,
     try_bulk_insert_worker: Arc<SingleParallelFlight<Result<(), CacheComputeError>>>,
 }
@@ -41,8 +39,6 @@ impl<
     pub fn new() -> Self {
         Self {
             cache: Cache::builder().build(),
-            get_with_worker: Arc::new(SingleParallelFlight::new()),
-            try_get_with_worker: Arc::new(SingleParallelFlight::new()),
             bulk_insert_worker: Arc::new(SingleParallelFlight::new()),
             try_bulk_insert_worker: Arc::new(SingleParallelFlight::new()),
         }
@@ -56,20 +52,9 @@ impl<
         self.cache.insert(value.key(), value).await;
     }
 
-    // There is an implementation of try_get_with in moka already, but to provide consistent behaviour
-    // we're rolling our own. What could possibly go wrong?
     #[allow(unused)]
     pub async fn get_with(&self, key: &K, init: impl Future<Output = V>) -> V {
-        if let Some(v) = self.get(key).await {
-            return v;
-        }
-        self.get_with_worker
-            .work(async || {
-                let value = init.await;
-                self.insert(value.clone()).await;
-                value
-            })
-            .await
+        self.cache.get_with_by_ref(key, init).await
     }
 
     pub async fn try_get_with<E: std::error::Error + Send + Sync + 'static>(
@@ -77,18 +62,10 @@ impl<
         key: &K,
         init: impl Future<Output = Result<V, E>>,
     ) -> Result<V, CacheComputeError> {
-        if let Some(v) = self.get(key).await {
-            return Ok(v);
-        }
-        let v = self
-            .try_get_with_worker
-            .work(async || {
-                let value = init.await.map_err(CacheComputeError::from_err)?;
-                self.insert(value.clone()).await;
-                Ok(value)
-            })
-            .await?;
-        Ok(v)
+        self.cache
+            .try_get_with_by_ref(key, init)
+            .await
+            .map_err(|e| CacheComputeError(e))
     }
 
     #[allow(unused)]
