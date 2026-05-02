@@ -1,2 +1,4 @@
 dissallow selecting app text
 setup motion variables to not use hard coded values
+thing fails on multiple simultaneous calls which state transition
+check referesh behaviour, because it might not work

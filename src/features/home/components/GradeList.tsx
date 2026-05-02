@@ -1,7 +1,8 @@
-import { useLatestGrades } from "../hooks";
-import SkeletonLoader from "../../../components/SkeletonLoader";
-import CardList from "../../../components/CardList";
-import { M3eHeading } from "@m3e/react/heading";
+import { useLatestGrades } from "../hooks"
+import SkeletonLoader from "../../../components/SkeletonLoader"
+import CardList from "../../../components/CardList"
+import { M3eHeading } from "@m3e/react/heading"
+import style from "./GradeList.module.css"
 
 
 function GradeList() {
@@ -16,7 +17,12 @@ function GradeList() {
                 return {
                     id: grade.id,
                     props: {
-                        leading: <M3eHeading variant="headline" size="large">{grade.grade}</M3eHeading>,
+                        leading: <div className={style.gradeMarkBox}>
+                            <M3eHeading
+                                variant="headline"
+                                size="large"
+                            >{grade.grade}</M3eHeading>
+                        </div>,
                         title: grade.subject.name,
                         subtitle: grade.category.name,
                     }
