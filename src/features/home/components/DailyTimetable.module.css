@@ -67,8 +67,29 @@
     gap: 0.5rem;
 }
 
+.subjectEventEntry {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
 .flexBoxVerticalDivider {
     width: 1px;
     background-color: var(--md-sys-color-outline-variant);
     margin: 0.5rem 0rem;
+}
+
+.secondaryWeightedText {
+    color: var(--md-sys-color-secondary);
+    font-weight: 600;
+}
+
+.eventChip {
+    --m3e-chip-container-height: 1rem;
+    --m3e-chip-container-shape: 8px;
+    --m3e-chip-label-text-font-weight: 500;
+    --m3e-chip-label-text-font-size: 0.7rem;
+    --m3e-chip-label-text-color: var(--md-sys-color-on-tertiary-container);
+    --m3e-elevated-chip-container-color: var(--md-sys-color-tertiary-container);
+    --m3e-elevated-chip-elevation: 0;
 }

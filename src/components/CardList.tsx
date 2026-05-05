@@ -31,7 +31,7 @@ function Item({ leading, title, subtitle, trailing, onAction }: ItemProps) {
                     >
                         <M3eHeading
                             variant="title"
-                            size="medium">
+                            size="small">
                             {title}
                         </M3eHeading>
                         <p className={style.subtitle}>{subtitle}</p>

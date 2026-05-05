@@ -10,7 +10,7 @@ function LinkedHeader({ title, destination }: { title: string, destination: stri
         <div className={style.headerContainer}>
             <M3eHeading
                 variant="title"
-                size="large"
+                size="medium"
                 className={style.header}
             >
                 {title}

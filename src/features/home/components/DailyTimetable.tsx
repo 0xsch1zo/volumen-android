@@ -62,7 +62,7 @@ function DailyTimetable() {
 
                     <M3eHeading
                         variant="label"
-                        size="medium"
+                        size="small"
                         className={style.subtitle}
                     >
                         {
@@ -71,7 +71,12 @@ function DailyTimetable() {
                                 <M3eHeading
                                     variant="label"
                                     size="medium">
-                                    Starting off with <b>{data?.time_blocks[0].subject}</b> at <b>{data?.time_blocks[0].start}</b>
+                                    Starting off with
+                                    <b className={style.secondaryWeightedText}>
+                                        {` ${data?.time_blocks[0].subject}`}
+                                    </b> at <b className={style.secondaryWeightedText}>
+                                        {data?.time_blocks[0].start}
+                                    </b>
                                 </M3eHeading>
                         }
                     </M3eHeading>
@@ -96,7 +101,7 @@ function Timeline({ timetable }: { timetable: DailyTimetableDto }) {
                 .time_blocks
                 .map(t => (`${t.start} - ${t.end}`))
                 .entries()
-                .map(([k, v]: [number, string]) => <M3eHeading key={k} variant="label" size="large">{v}</M3eHeading>)}
+                .map(([k, v]: [number, string]) => <M3eHeading key={k} variant="label" size="medium">{v}</M3eHeading>)}
         </div>
     )
 }
@@ -108,8 +113,8 @@ function SubjectEventList({ timetable }: { timetable: DailyTimetableDto }) {
                 .time_blocks
                 .entries()
                 .map(([_, t], i) => {
-                    return <div>
-                        <M3eHeading className={style.subjectEventTitle} key={i} variant="label" size="large" emphasized>{t.subject}</M3eHeading>
+                    return <div className={style.subjectEventEntry}>
+                        <M3eHeading className={style.subjectEventTitle} key={i} variant="label" size="medium" emphasized>{t.subject}</M3eHeading>
                         <EventList events={t.events} />
                     </div>
                 })
@@ -121,7 +126,11 @@ function SubjectEventList({ timetable }: { timetable: DailyTimetableDto }) {
 function EventList({ events }: { events: Array<Event> }) {
     return (
         <>
-            {events.map(e => <M3eChip variant="outlined">{e.category.name}</M3eChip>)}
+            {events.entries().map(([_, e], i) =>
+                <M3eChip key={i} className={style.eventChip} variant="elevated">
+                    {e.category.name}
+                </M3eChip>)
+            }
         </>
     )
 
