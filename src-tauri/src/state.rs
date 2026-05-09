@@ -17,7 +17,7 @@ pub enum StateTransitionError {
     LoginError(#[source] login::Error),
     #[error("account selection error")]
     AcccountSelectionError(#[source] repositories::account_selection::Error),
-    #[error("wanted to aquire wrong state: {0}")]
+    #[error("wanted to aquire state of wrong type: {0}")]
     WrongState(String),
 }
 
@@ -122,12 +122,16 @@ impl AppStatesInner {
         S: AppState,
         T: AppState,
     {
-        let type_wanted = any::type_name::<S>().to_owned();
-
-        let state = self.0.take().unwrap() as Box<dyn Any>;
+        let state = match self.0.as_ref().unwrap().as_any().downcast_ref::<S>() {
+            Some(_) => self.0.take().unwrap() as Box<dyn Any>,
+            None => {
+                let type_wanted = any::type_name::<S>().to_owned();
+                return Err(StateTransitionError::WrongState(type_wanted));
+            }
+        };
         let state = *state
             .downcast::<S>()
-            .map_err(|_| StateTransitionError::WrongState(type_wanted))?;
+            .expect("Unexpected downcast failure, typeid should be checked before downcasting");
 
         match transformer(state).await {
             Ok(s) => {
