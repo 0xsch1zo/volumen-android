@@ -32,14 +32,14 @@ function ChooseAccountPage({
             >
                 <M3eHeading
                     variant="headline"
-                    size="large"
+                    size="medium"
                     emphasized
                 >
                     Volumen
                 </M3eHeading>
                 <M3eHeading
                     variant="title"
-                    size="medium"
+                    size="small"
                 >
                     Choose an account
                 </M3eHeading>

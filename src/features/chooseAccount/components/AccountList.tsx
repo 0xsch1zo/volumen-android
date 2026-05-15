@@ -18,7 +18,7 @@ function AccountList({ accounts }: { accounts: Array<Account> }) {
                         const monogram = account.student_name.charAt(0)
 
                         return {
-                            id: account.id,
+                            key: account.id,
                             props: {
                                 leading: <M3eAvatar>{monogram}</M3eAvatar>,
                                 title: account.student_name,

@@ -44,7 +44,7 @@ function Item({ leading, title, subtitle, trailing, onAction }: ItemProps) {
 }
 
 interface DistinctItem {
-    id: number,
+    key: number,
     props: ItemProps,
 }
 
@@ -52,7 +52,7 @@ function CardList({ items }: { items: Array<DistinctItem> }) {
     return (
         <div className={style.list}>
             {items.map(i => {
-                return <Item key={i.id} {...i.props} />
+                return <Item key={i.key} {...i.props} />
             })}
         </div>
     )

@@ -2,5 +2,3 @@ dissallow selecting app text
 setup motion variables to not use hard coded values
 check referesh behaviour, because it might not work
 adjust font sizes in the whole app
-
-bug where ever you click on the choose account screen the arrow is being animated
