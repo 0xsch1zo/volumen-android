@@ -8,9 +8,9 @@ import {
 import "./root.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-export const queryClient = new QueryClient()
+const queryClient = new QueryClient()
 
-export function Layout({ children }: { children: React.ReactNode }) {
+function Layout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en">
             <head>
@@ -43,7 +43,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     );
 }
 
-export default function App() {
+function App() {
     return <Outlet />;
 }
 
+export {
+    queryClient,
+    Layout,
+}
+
+export default App

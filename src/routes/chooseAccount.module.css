@@ -8,6 +8,11 @@
     max-height: 100dvh;
     min-width: 100dvw;
     max-width: 100dvw;
+    box-sizing: border-box;
+    padding-top: var(--inset-top);
+    padding-bottom: var(--inset-bottom);
+    padding-left: var(--inset-left);
+    padding-right: var(--inset-right);
 }
 
 .heading {

@@ -15,3 +15,4 @@ function LoginPage({ }: Route.ComponentProps) {
 }
 
 export default LoginPage
+
