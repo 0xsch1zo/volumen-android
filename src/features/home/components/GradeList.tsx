@@ -15,7 +15,7 @@ function GradeList() {
         : <CardList items={
             data.map(grade => {
                 return {
-                    id: grade.id,
+                    key: grade.id,
                     props: {
                         leading: <div className={style.gradeMarkBox}>
                             <M3eHeading

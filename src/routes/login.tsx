@@ -7,10 +7,12 @@ import style from "./login.module.css"
 
 function LoginPage({ }: Route.ComponentProps) {
     return (
-        <div className={style.container}>
+        <>
             <GeometricBackground />
-            <LoginForm />
-        </div>
+            <div className={style.container}>
+                <LoginForm />
+            </div>
+        </>
     )
 }
 

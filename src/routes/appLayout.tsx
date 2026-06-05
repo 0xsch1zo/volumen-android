@@ -23,6 +23,7 @@ function AppLayout({ loaderData }: Route.ComponentProps) {
                 <Outlet />
             </div>
             <NavBar />
+            <div className={style.barInsetFiller} />
         </div>
     )
 }

@@ -9,11 +9,16 @@
     max-width: 100dvw;
     box-sizing: border-box;
     padding-top: var(--inset-top);
-    padding-bottom: var(--inset-bottom);
     padding-left: var(--inset-left);
     padding-right: var(--inset-right);
 }
 
 .outletContainer {
     flex-grow: 1;
+}
+
+.barInsetFiller {
+    margin: 0;
+    height: var(--inset-bottom);
+    background-color: var(--md-sys-color-surface-container);
 }

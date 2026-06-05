@@ -3,6 +3,7 @@
     align-items: center;
     flex-direction: column;
     z-index: 1;
+    margin-bottom: 6.5rem;
 }
 
 .heading {
@@ -27,8 +28,8 @@
 
 .actionButtons {
     display: flex;
+    margin-top: 0.5rem;
     width: 77dvw;
-    height: 7.75rem;
     flex-direction: column;
     justify-content: space-between;
     --m3e-button-medium-label-text-font-weight: bold;

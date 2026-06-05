@@ -3,15 +3,11 @@ import homeIcon from "../assets/home.svg"
 import gradeIcon from "../assets/grade.svg"
 import calendarIcon from "../assets/calendar.svg"
 import messageIcon from "../assets/message.svg"
-
-/*function Item() {
-    let navItem = <M3eNavItem />
-    navItem.props.children;
-}*/
+import style from "./NavBar.module.css"
 
 function NavBar() {
     return (
-        <M3eNavBar>
+        <M3eNavBar className={style.navBar}>
             <M3eNavItem selected>
                 <img slot="icon" src={homeIcon} />
                 Home

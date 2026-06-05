@@ -25,27 +25,29 @@ function ChooseAccountPage({
 }: Route.ComponentProps) {
     const { accounts } = loaderData
     return (
-        <div className={styles.container}>
+        <>
             <GeometricBackground />
-            <div
-                className={styles.heading}
-            >
-                <M3eHeading
-                    variant="headline"
-                    size="medium"
-                    emphasized
+            <div className={styles.container}>
+                <div
+                    className={styles.heading}
                 >
-                    Volumen
-                </M3eHeading>
-                <M3eHeading
-                    variant="title"
-                    size="small"
-                >
-                    Choose an account
-                </M3eHeading>
+                    <M3eHeading
+                        variant="headline"
+                        size="medium"
+                        emphasized
+                    >
+                        Volumen
+                    </M3eHeading>
+                    <M3eHeading
+                        variant="title"
+                        size="medium"
+                    >
+                        Choose an account
+                    </M3eHeading>
+                </div>
+                <AccountList accounts={accounts} />
             </div>
-            <AccountList accounts={accounts} />
-        </div>
+        </>
     )
 }
 

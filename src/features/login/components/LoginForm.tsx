@@ -60,14 +60,6 @@ function LoginForm() {
                     >
                         Login
                     </M3eButton>
-
-                    <M3eButton
-                        variant="tonal"
-                        shape="square"
-                        size="medium"
-                    >
-                        Register
-                    </M3eButton>
                 </div>
             </form>
         </div>
