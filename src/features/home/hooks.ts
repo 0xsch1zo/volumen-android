@@ -21,9 +21,9 @@ function useLatestGrades() {
                 let maxDisplayed = (grades.length < MAX_GRADES_DISPLAYED)
                     ? grades.length
                     : MAX_GRADES_DISPLAYED;
-                return grades.slice(grades.length - maxDisplayed)
+                return grades.slice(grades.length - maxDisplayed).reverse()
             } else {
-                return grades
+                return grades.reverse()
             }
         },
     })

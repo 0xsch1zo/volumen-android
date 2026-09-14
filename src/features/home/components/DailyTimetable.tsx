@@ -97,11 +97,11 @@ function DailyTimetable() {
 function Timeline({ timetable }: { timetable: DailyTimetableDto }) {
     return (
         <div className={style.timeline}>
-            {timetable
+            {[...timetable
                 .time_blocks
                 .map(t => (`${t.start} - ${t.end}`))
                 .entries()
-                .map(([k, v]: [number, string]) => <M3eHeading key={k} variant="label" size="medium">{v}</M3eHeading>)}
+                .map(([k, v]: [number, string]) => <M3eHeading key={k} variant="label" size="medium">{v}</M3eHeading>)]}
         </div>
     )
 }
@@ -109,15 +109,15 @@ function Timeline({ timetable }: { timetable: DailyTimetableDto }) {
 function SubjectEventList({ timetable }: { timetable: DailyTimetableDto }) {
     return (
         <div className={style.subjectEventList}>
-            {timetable
+            {[...timetable
                 .time_blocks
                 .entries()
                 .map(([_, t], i) => {
-                    return <div className={style.subjectEventEntry}>
-                        <M3eHeading className={style.subjectEventTitle} key={i} variant="label" size="medium" emphasized>{t.subject}</M3eHeading>
+                    return <div className={style.subjectEventEntry} key={i}>
+                        <M3eHeading className={style.subjectEventTitle} variant="label" size="medium" emphasized>{t.subject}</M3eHeading>
                         <EventList events={t.events} />
                     </div>
-                })
+                })]
             }
         </div>
     )
@@ -126,10 +126,10 @@ function SubjectEventList({ timetable }: { timetable: DailyTimetableDto }) {
 function EventList({ events }: { events: Array<Event> }) {
     return (
         <>
-            {events.entries().map(([_, e], i) =>
+            {[...events.entries().map(([_, e], i) =>
                 <M3eChip key={i} className={style.eventChip} variant="elevated">
                     {e.category.name}
-                </M3eChip>)
+                </M3eChip>)]
             }
         </>
     )
