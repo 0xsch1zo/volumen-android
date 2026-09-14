@@ -41,7 +41,6 @@ export interface Grade {
     kind: GradeKind
 }
 
-
 export interface Event {
     id: number,
     content: string,
@@ -58,6 +57,22 @@ export interface Event {
         name: string,
         short: string,
         is_extracurricular: string,
-    }
+    } | null
     add_date: string
+}
+
+export interface ReceivedMessagePreview {
+    // FIXME: change the name of this field to reflect the rest
+    message_id: number,
+    sender_name: string,
+    topic: string,
+    fragment: string,
+    send_date: string,
+    read_date?: string | null,
+    has_file_attachment: boolean,
+}
+
+export interface ReceivedMessagePreviews {
+    messages: Array<ReceivedMessagePreview>,
+    total: number
 }

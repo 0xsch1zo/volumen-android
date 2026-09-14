@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { gradesList } from "./api";
+import { gradesList, recentMessages } from "./api";
 
 function useLatestGrades() {
     const MAX_GRADES_DISPLAYED = 3
@@ -29,6 +29,26 @@ function useLatestGrades() {
     })
 }
 
+function useLatestMessages() {
+    const MAX_MESSAGES_DISPLAYED = 3
+    return useQuery({
+        queryKey: ["latestMessages"],
+        queryFn: async () => {
+            let messages = await recentMessages().then((messages) => messages.messages)
+            if (messages.length >= 1) {
+                let maxDisplayed = (messages.length < MAX_MESSAGES_DISPLAYED)
+                    ? messages.length
+                    : MAX_MESSAGES_DISPLAYED;
+                // FIXME: i dunno why but slice doesnt work with (0, MAX_MESSAGES_DISPLAYED)
+                return messages.slice(messages.length - maxDisplayed)
+            } else {
+                return messages
+            }
+        }
+    })
+}
+
 export {
     useLatestGrades,
+    useLatestMessages,
 }

@@ -3,6 +3,7 @@ import GradeList from "../features/home/components/GradeList"
 import style from "./home.module.css"
 import LinkedHeader from "../features/home/components/LinkedHeader"
 import DailyTimetable from "../features/home/components/DailyTimetable"
+import MessageList from "../features/home/components/MessageList"
 
 function HomePage({ }: Route.ComponentProps) {
     return (
@@ -17,6 +18,11 @@ function HomePage({ }: Route.ComponentProps) {
                 destination="/temp"
             />
             <DailyTimetable />
+            <LinkedHeader
+                title="Messages"
+                destination="/temp"
+            />
+            <MessageList />
         </div>
     )
 }
