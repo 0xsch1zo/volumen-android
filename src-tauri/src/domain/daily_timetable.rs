@@ -185,8 +185,8 @@ fn trim_timetable_on_ends(time_blocks: Vec<Option<TimeBlock>>) -> Vec<Option<Tim
 }
 
 pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<DailyTimetable, Error> {
-    // let today = Local::now().date_naive();
-    let today = NaiveDate::from_ymd_opt(2026, 04, 28).unwrap();
+    let today = Local::now().date_naive();
+    //let today = NaiveDate::from_ymd_opt(2026, 04, 28).unwrap();
     let current_time = Local::now().time();
 
     let when = TimetableWhen::fetch_from_current_timetable(&app_repos, today, current_time).await?;

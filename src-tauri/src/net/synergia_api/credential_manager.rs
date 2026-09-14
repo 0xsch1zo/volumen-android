@@ -90,6 +90,7 @@ pub struct UnauthenticatedError;
 #[error("failed to construt client of PortalCredentialManager")]
 pub struct PortalClientConstructionError(#[source] reqwest::Error);
 
+// TODO weird why?
 struct UnauthenticatedErrorMiddleware;
 
 #[async_trait::async_trait]

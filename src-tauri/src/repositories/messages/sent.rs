@@ -13,7 +13,7 @@ use crate::{
 pub enum Error {
     #[error("failed to get message list")]
     ListGetError(#[source] CacheComputeError),
-    #[error("failed to get message ")]
+    #[error("failed to get message")]
     MessageGetError(#[source] CacheComputeError),
 }
 

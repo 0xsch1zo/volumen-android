@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use serde::Serialize;
+
 use crate::{
     net::{
         synergia_api::{
@@ -23,7 +25,7 @@ pub mod sent;
 pub struct Page(usize);
 
 impl Page {
-    pub fn new(_0: usize) -> Self {
+    pub const fn new(_0: usize) -> Self {
         Self(_0)
     }
 
@@ -35,7 +37,7 @@ impl Page {
 pub struct Limit(usize);
 
 impl Limit {
-    pub fn new(_0: usize) -> Self {
+    pub const fn new(_0: usize) -> Self {
         Self(_0)
     }
 
@@ -44,7 +46,8 @@ impl Limit {
     }
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[serde(transparent)]
 pub struct MessageId(usize);
 
 impl MessageId {

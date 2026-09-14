@@ -66,6 +66,7 @@ pub fn run() {
             commands::grades_list,
             commands::current_account,
             commands::daily_timetable,
+            commands::recent_messages,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

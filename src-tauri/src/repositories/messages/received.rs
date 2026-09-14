@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -17,7 +18,7 @@ pub enum Error {
     MessageGetError(#[source] CacheComputeError),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Clone, Debug)]
 pub struct ReceivedMessagePreview {
     pub message_id: MessageId,
     pub sender_name: String,
@@ -28,7 +29,7 @@ pub struct ReceivedMessagePreview {
     pub has_file_attachment: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Clone, Debug)]
 pub struct ReceivedMessagePreviews {
     pub messages: Vec<ReceivedMessagePreview>,
     pub total: usize,

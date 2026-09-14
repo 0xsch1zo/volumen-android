@@ -6,7 +6,11 @@ use crate::{
     error::{
         ApplicationError, ApplicationResultExt, LoggedApplicationResultExt, StatefulResultExt,
     },
-    repositories::{account_selection::SynergiaAccount, grades::Grade},
+    repositories::{
+        account_selection::SynergiaAccount,
+        grades::Grade,
+        messages::{received::ReceivedMessagePreviews, Limit, Page},
+    },
     state::{
         AccountSelectionState, AppStates, AuthenticatedState, StateTransitionError,
         UnauthenticatedState,
@@ -110,4 +114,23 @@ pub async fn daily_timetable(state: State<'_, AppStates>) -> Result<DailyTimetab
         .await
         .map_err(ApplicationError::DailyTimetableQueryError)
         .log_on_err()?)
+}
+
+#[tauri::command]
+pub async fn recent_messages(state: State<'_, AppStates>) -> Result<ReceivedMessagePreviews> {
+    const FIRST_PAGE: Page = Page::new(1);
+    const MESSAGE_LIMIT: Limit = Limit::new(10);
+    let state_lock = state.lock().await;
+    let state = state_lock
+        .as_state::<AuthenticatedState>()
+        .map_err(ApplicationError::StateAquisitionError)
+        .log_on_err()?;
+    let received_messages_delegate = state.app_repositories.messages().received();
+    let received_messages = received_messages_delegate
+        .list(FIRST_PAGE, MESSAGE_LIMIT)
+        .await
+        .map_err(ApplicationError::RecentMessagesQueryError)
+        .log_on_err()?;
+
+    Ok(received_messages)
 }
