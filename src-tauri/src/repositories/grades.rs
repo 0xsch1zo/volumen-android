@@ -72,7 +72,7 @@ impl Keyable<GradeId> for ShallowGrade {
 
 pub type ShallowGrades = Vec<ShallowGrade>;
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 pub enum GradeKind {
     Constituent,
     Semester,
@@ -134,7 +134,7 @@ impl GradeKind {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 pub struct Grade {
     id: GradeId,
     added_by: UserId,
@@ -147,7 +147,7 @@ pub struct Grade {
     pub kind: GradeKind,
 }
 
-type Grades = Vec<Grade>;
+pub type Grades = Vec<Grade>;
 
 #[derive(Debug)]
 pub struct GradeDetails {

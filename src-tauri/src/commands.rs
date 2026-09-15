@@ -2,7 +2,7 @@ use futures::TryFutureExt;
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
-    domain::daily_timetable::DailyTimetable,
+    domain::{daily_timetable::DailyTimetable, subject_grades::SubjectGrades},
     error::{
         ApplicationError, ApplicationResultExt, LoggedApplicationResultExt, StatefulResultExt,
     },
@@ -133,4 +133,19 @@ pub async fn recent_messages(state: State<'_, AppStates>) -> Result<ReceivedMess
         .log_on_err()?;
 
     Ok(received_messages)
+}
+
+#[tauri::command]
+pub async fn list_subject_grades(state: State<'_, AppStates>) -> Result<Vec<SubjectGrades>> {
+    let state_lock = state.lock().await;
+    let state = state_lock
+        .as_state::<AuthenticatedState>()
+        .map_err(ApplicationError::StateAquisitionError)
+        .log_on_err()?;
+    Ok(state
+        .app_usecases
+        .list_subject_grades()
+        .await
+        .map_err(ApplicationError::SubjectGradesQueryError)
+        .log_on_err()?)
 }
