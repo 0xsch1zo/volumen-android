@@ -1,4 +1,3 @@
-import { M3eAvatar } from "@m3e/react/avatar"
 import CardList from "../../../components/CardList"
 import { useLatestMessages } from "../hooks"
 import SkeletonLoader from "../../../components/SkeletonLoader"
@@ -16,8 +15,6 @@ function MessageList() {
                 return {
                     key: message.message_id,
                     props: {
-
-                        // TODO: seperate authors better from topics
                         header: message.sender_name,
                         title: message.topic,
                         subtitle: `${message.fragment}...`,

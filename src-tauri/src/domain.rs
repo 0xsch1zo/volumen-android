@@ -30,7 +30,7 @@ impl AppUseCases {
         Ok(daily_timetable::daily_timetable_usecase(&self.app_repos).await?)
     }
 
-    pub async fn list_subject_grades(&self) -> Result<Vec<SubjectGrades>, Error> {
-        Ok(subject_grades::list_subject_grades_usecase(&self.app_repos).await?)
+    pub async fn subject_grades_list(&self) -> Result<Vec<SubjectGrades>, Error> {
+        Ok(subject_grades::subject_grades_list_usecase(&self.app_repos).await?)
     }
 }

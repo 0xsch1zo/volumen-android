@@ -10,7 +10,7 @@ function HomePage({ }: Route.ComponentProps) {
         <div className={style.dashboardContainer}>
             <LinkedHeader
                 title="Grades"
-                destination="/temp"
+                destination="/grades"
             />
             <GradeList />
             <LinkedHeader

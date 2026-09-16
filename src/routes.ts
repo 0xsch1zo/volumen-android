@@ -11,7 +11,8 @@ export default [
             index("./routes/login.tsx"),
             route("choose-account", "./routes/chooseAccount.tsx"),
             layout("./routes/appLayout.tsx", [
-                route("home", "./routes/home.tsx")
+                route("home", "./routes/home.tsx"),
+                route("grades", "./routes/grades.tsx")
             ])
         ]),
     ])

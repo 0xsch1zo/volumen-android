@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use itertools::Itertools;
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::repositories::{
@@ -14,12 +15,14 @@ pub enum Error {
     #[error("failed to fetch grade list")]
     GradeFetchError(#[source] grades::Error),
 }
+
+#[derive(Debug, Serialize)]
 pub struct SubjectGrades {
     subject: Subject,
     grades: Vec<Grade>,
 }
 
-pub async fn list_subject_grades_usecase(
+pub async fn subject_grades_list_usecase(
     app_repos: &AppRepositories,
 ) -> Result<Vec<SubjectGrades>, Error> {
     let mut subject_grades_map: HashMap<SubjectId, Vec<Grade>> = HashMap::new();

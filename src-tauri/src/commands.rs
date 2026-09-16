@@ -136,7 +136,7 @@ pub async fn recent_messages(state: State<'_, AppStates>) -> Result<ReceivedMess
 }
 
 #[tauri::command]
-pub async fn list_subject_grades(state: State<'_, AppStates>) -> Result<Vec<SubjectGrades>> {
+pub async fn subject_grades_list(state: State<'_, AppStates>) -> Result<Vec<SubjectGrades>> {
     let state_lock = state.lock().await;
     let state = state_lock
         .as_state::<AuthenticatedState>()
@@ -144,7 +144,7 @@ pub async fn list_subject_grades(state: State<'_, AppStates>) -> Result<Vec<Subj
         .log_on_err()?;
     Ok(state
         .app_usecases
-        .list_subject_grades()
+        .subject_grades_list()
         .await
         .map_err(ApplicationError::SubjectGradesQueryError)
         .log_on_err()?)
