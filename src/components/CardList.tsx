@@ -4,13 +4,17 @@ import { M3eHeading } from "@m3e/react/heading";
 
 type ItemProps = {
     leading?: React.ReactNode,
+    header?: string,
     title: string,
     subtitle: string,
     trailing?: React.ReactNode
     onAction?: () => void,
 }
 
-function Item({ leading, title, subtitle, trailing, onAction }: ItemProps) {
+function Item({ leading, header, title, subtitle, trailing, onAction }: ItemProps) {
+    let leading_contained = leading !== undefined ? <div className={style.leading}>
+        {leading}
+    </div> : undefined;
     return (
         <M3eCard
             orientation="horizontal"
@@ -24,11 +28,16 @@ function Item({ leading, title, subtitle, trailing, onAction }: ItemProps) {
             }
         >
             <div className={style.card}>
+                {leading_contained}
                 <div className={style.left}>
-                    {leading}
                     <div
                         className={style.content}
                     >
+                        <M3eHeading
+                            variant="title"
+                            size="small">
+                            {header}
+                        </M3eHeading>
                         <M3eHeading
                             variant="title"
                             size="small">

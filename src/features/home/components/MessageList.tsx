@@ -16,12 +16,10 @@ function MessageList() {
                 return {
                     key: message.message_id,
                     props: {
-                        // FIXME: sloppy letter picking
-                        leading: <M3eAvatar>
-                            {message.sender_name.at(0)}
-                        </M3eAvatar>,
+
                         // TODO: seperate authors better from topics
-                        title: `${message.topic} - ${message.sender_name}`,
+                        header: message.sender_name,
+                        title: message.topic,
                         subtitle: `${message.fragment}...`,
                     }
                 }
