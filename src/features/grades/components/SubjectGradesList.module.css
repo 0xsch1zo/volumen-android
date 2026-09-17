@@ -1,10 +1,24 @@
+/*.gradeChip {
+    --m3e-chip-container-height: 2.875rem;
+}*/
+
 .gradeChipList {
     margin: 0.5rem 1rem;
 }
 
 .subjectName {
     border-bottom-left-radius: 0.75rem;
-    border-bottom-right-radius: 0.7rem;
+    border-bottom-right-radius: 0.75rem;
     padding: 0rem 1rem;
     background-color: var(--md-sys-color-secondary-container);
+}
+
+.emptySubjectGrades {
+    height: 3rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: var(--md-sys-color-on-surface-variant);
+    opacity: 70%;
 }
