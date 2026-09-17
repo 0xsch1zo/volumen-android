@@ -6,10 +6,11 @@ import { M3eHeading } from "@m3e/react/heading";
 import { M3eChip, M3eChipSet } from "@m3e/react/chips";
 import { useQuery } from "@tanstack/react-query";
 import { subjectGradesList } from "../api";
+import styles from "./SubjectGradesList.module.css";
 
 function GradeChipList({ grades }: { grades: Array<Grade> }) {
     return (
-        <M3eChipSet>
+        <M3eChipSet className={styles.gradeChipList}>
             {grades.map(grade => <M3eChip>{grade.grade}</M3eChip>)}
         </M3eChipSet>
     )
@@ -20,7 +21,7 @@ function SubjectGradesCard({ subjectGrades }: { subjectGrades: SubjectGrades }) 
         <M3eCard variant="outlined">
             <GradeChipList grades={subjectGrades.grades} />
             <M3eDivider />
-            <M3eHeading variant="title" size="small">{subjectGrades.subject.name}</M3eHeading>
+            <M3eHeading variant="title" size="small" className={styles.subjectName}>{subjectGrades.subject.name}</M3eHeading>
         </M3eCard>
     )
 }

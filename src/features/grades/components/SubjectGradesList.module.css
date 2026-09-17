@@ -1,0 +1,10 @@
+.gradeChipList {
+    margin: 0.5rem 1rem;
+}
+
+.subjectName {
+    border-bottom-left-radius: 0.75rem;
+    border-bottom-right-radius: 0.7rem;
+    padding: 0rem 1rem;
+    background-color: var(--md-sys-color-secondary-container);
+}
