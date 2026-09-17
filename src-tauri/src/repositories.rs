@@ -5,7 +5,7 @@ use crate::{
     repositories::{
         account_selection::SynergiaAccount, calendar::CalendarRepository, events::EventsRepository,
         grades::GradesRepository, messages::MessagesRepository, session::SessionRepository,
-        timetable::TimetableRepository,
+        subjects::SubjectsRepository, timetable::TimetableRepository,
     },
 };
 
@@ -28,6 +28,7 @@ use tauri::AppHandle;
 #[derive(Clone, Debug)]
 pub struct AppRepositories {
     grades: GradesRepository,
+    subjects: SubjectsRepository,
     messages: MessagesRepository,
     timetables: TimetableRepository,
     events: EventsRepository,
@@ -44,6 +45,7 @@ impl AppRepositories {
         let synergia_api = Arc::new(synergia_api);
 
         let grades = GradesRepository::new(Arc::clone(&synergia_api));
+        let subjects = SubjectsRepository::new(Arc::clone(&synergia_api));
         let messages = MessagesRepository::new(Arc::clone(&synergia_api));
         let timetables = TimetableRepository::new(Arc::clone(&synergia_api));
         let events = EventsRepository::new(Arc::clone(&synergia_api));
@@ -52,6 +54,7 @@ impl AppRepositories {
 
         Self {
             grades,
+            subjects,
             messages,
             timetables,
             events,
@@ -60,22 +63,24 @@ impl AppRepositories {
         }
     }
 
-    #[allow(unused)]
     pub fn grades(&self) -> &GradesRepository {
         &self.grades
     }
 
-    #[allow(unused)]
+    pub fn subjects(&self) -> &SubjectsRepository {
+        &self.subjects
+    }
+
     pub fn messages(&self) -> &MessagesRepository {
         &self.messages
     }
 
+    // FIXME: shouldn't it be timetable
     #[allow(unused)]
     pub fn timetables(&self) -> &TimetableRepository {
         &self.timetables
     }
 
-    #[allow(unused)]
     pub fn events(&self) -> &EventsRepository {
         &self.events
     }
