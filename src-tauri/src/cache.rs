@@ -101,7 +101,7 @@ impl<
         self.cache.iter()
     }
 
-    pub async fn size(&self) -> usize {
+    pub async fn entry_count(&self) -> usize {
         self.cache.run_pending_tasks().await;
         self.cache.entry_count() as usize
     }

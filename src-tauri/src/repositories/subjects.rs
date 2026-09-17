@@ -7,6 +7,7 @@ use crate::{
         SynergiaApi,
     },
 };
+use itertools::Itertools;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -28,7 +29,7 @@ impl SubjectId {
     }
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Hash, Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     pub id: SubjectId,
     pub name: String,
@@ -77,5 +78,20 @@ impl SubjectsRepository {
             .await
             .ok_or(Error::SubjectNotFound(id))?
             .clone())
+    }
+
+    pub async fn list(&self) -> Result<Subjects, Error> {
+        // we consider subjects to be constant so once there cached we can use them indefinitely
+        if self.cache.entry_count().await == 0 {
+            self.cache
+                .try_bulk_insert_with(async {
+                    let subjects = self.synergia_api.fetch_subjects().await?;
+                    Ok::<_, AuthenticatedSynergiaApiError>(subjects)
+                })
+                .await
+                .map_err(|e| Error::SubjectFetchFailed(e))?;
+        }
+
+        Ok(self.cache.iter().map(|(_, val)| val).collect_vec())
     }
 }

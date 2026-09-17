@@ -168,7 +168,7 @@ impl EventsRepository {
     }
 
     pub async fn list(&self) -> Result<Vec<Event>, Error> {
-        if self.cache.size().await == 0 {
+        if self.cache.entry_count().await == 0 {
             self.cache
                 .try_bulk_insert_with(async { self.synergia_api.events().fetch_list().await })
                 .await
