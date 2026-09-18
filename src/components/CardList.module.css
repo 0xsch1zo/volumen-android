@@ -19,6 +19,7 @@
 
 .content {
     gap: 0.25rem;
+    flex-grow: 1;
 }
 
 .subtitle {

@@ -21,5 +21,6 @@
 .barInsetFiller {
     margin: 0;
     height: var(--inset-bottom);
+    min-height: var(--inset-bottom);
     background-color: var(--md-sys-color-surface-container);
 }

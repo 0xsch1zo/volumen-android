@@ -29,22 +29,20 @@ function Item({ leading, header, title, subtitle, trailing, onAction }: ItemProp
         >
             <div className={style.card}>
                 {leading_contained}
-                <div className={style.left}>
-                    <div
-                        className={style.content}
-                    >
-                        <M3eHeading
-                            variant="title"
-                            size="small">
-                            {header}
-                        </M3eHeading>
-                        <M3eHeading
-                            variant="title"
-                            size="small">
-                            {title}
-                        </M3eHeading>
-                        <p className={style.subtitle}>{subtitle}</p>
-                    </div>
+                <div
+                    className={style.content}
+                >
+                    <M3eHeading
+                        variant="title"
+                        size="small">
+                        {header}
+                    </M3eHeading>
+                    <M3eHeading
+                        variant="title"
+                        size="small">
+                        {title}
+                    </M3eHeading>
+                    <p className={style.subtitle}>{subtitle}</p>
                 </div>
                 {trailing}
             </div>
