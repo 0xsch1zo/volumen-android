@@ -2,7 +2,7 @@ use futures::TryFutureExt;
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
-    domain::{daily_timetable::DailyTimetable, subject_grades::SubjectGrades},
+    domain::{subject_grades::SubjectGrades, timetable::daily_timetable::DailyTimetable},
     error::{
         ApplicationError, ApplicationResultExt, LoggedApplicationResultExt, StatefulResultExt,
     },
