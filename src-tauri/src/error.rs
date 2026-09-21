@@ -20,6 +20,8 @@ pub enum ApplicationError {
     DailyTimetableQueryError(#[source] domain::Error),
     #[error("failed to get subject grades")]
     SubjectGradesQueryError(#[source] domain::Error),
+    #[error("failed to get full timetable for the week")]
+    FullTimetableQueryError(#[source] domain::Error),
     #[error("failed to list recent messages")]
     RecentMessagesQueryError(#[source] repositories::messages::received::Error),
     #[error("state aquisition failed")]

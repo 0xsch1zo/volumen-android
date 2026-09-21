@@ -1,7 +1,10 @@
 use thiserror::Error;
 
 use crate::{
-    domain::{subject_grades::SubjectGrades, timetable::daily_timetable::DailyTimetable},
+    domain::{
+        subject_grades::SubjectGrades,
+        timetable::{daily_timetable::DailyTimetable, full_timetable::Timetable},
+    },
     repositories::AppRepositories,
 };
 
@@ -11,6 +14,8 @@ pub enum Error {
     DailyTimetableError(#[from] timetable::daily_timetable::Error),
     #[error("list subject grades usecase failed")]
     SubjectGradesError(#[from] subject_grades::Error),
+    #[error("full timetable usecase failed")]
+    FullTimetableError(#[from] timetable::full_timetable::Error),
 }
 
 pub mod subject_grades;
@@ -32,5 +37,9 @@ impl AppUseCases {
 
     pub async fn subject_grades_list(&self) -> Result<Vec<SubjectGrades>, Error> {
         Ok(subject_grades::subject_grades_list_usecase(&self.app_repos).await?)
+    }
+
+    pub async fn full_timetable(&self, date: Option<String>) -> Result<Timetable, Error> {
+        Ok(timetable::full_timetable::full_timetable_usecase(&self.app_repos, date).await?)
     }
 }

@@ -1,11 +1,14 @@
 use chrono::{Datelike, Days, Local, NaiveDate, NaiveTime, Weekday};
-use itertools::Itertools;
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
-    domain::timetable::{SubjectEventTimeBlock, YMD_FORMAT},
-    repositories::{self, events::Event, timetable::WeekStart, AppRepositories},
+    domain::timetable::{SubjectEventTimeBlock, WeekOpExt, YMD_FORMAT},
+    repositories::{
+        self,
+        timetable::{TimeBlocks, WeekStart},
+        AppRepositories,
+    },
 };
 
 #[derive(Debug, Error)]
@@ -20,8 +23,6 @@ pub enum Error {
     TimetableFetchError(#[source] repositories::timetable::Error),
     #[error("lessons for needed timetable date not found")]
     LessonsForDateNotFound,
-    #[error("failed to fetch timeblocks for a day")]
-    TimeblockFetchError(super::Error),
     #[error("failed to fetch events")]
     EventFetchError(super::Error),
     #[error("failed to merge a timeblock and events to construct a subject-event timeblock")]
@@ -102,20 +103,23 @@ pub struct DailyTimetable {
     time_blocks: Vec<Option<SubjectEventTimeBlock>>,
 }
 
-trait WeekOpExt {
-    fn is_weekend(&self) -> bool;
+async fn fetch_timeblocks_of_day(
+    app_repos: &AppRepositories,
+    week_start: NaiveDate,
+    timetable_date: NaiveDate,
+) -> Result<TimeBlocks, Error> {
+    let timetable = app_repos
+        .timetables()
+        .timetable(WeekStart::new(week_start.format(YMD_FORMAT).to_string()))
+        .await
+        .map_err(Error::TimetableFetchError)?;
 
-    fn week_start(&self) -> Self;
-}
-
-impl WeekOpExt for NaiveDate {
-    fn is_weekend(&self) -> bool {
-        self.weekday().number_from_monday() >= Weekday::Sat.number_from_monday()
-    }
-
-    fn week_start(&self) -> NaiveDate {
-        self.week(Weekday::Mon).first_day()
-    }
+    Ok(timetable
+        .inner_timetable
+        .into_iter()
+        .find(|day| day.date == timetable_date.format(YMD_FORMAT).to_string())
+        .ok_or(Error::LessonsForDateNotFound)?
+        .time_blocks)
 }
 
 pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<DailyTimetable, Error> {
@@ -135,9 +139,7 @@ pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<Dail
         TimetableWhen::Today => today,
     };
 
-    let time_blocks = super::fetch_timeblocks_of_day(app_repos, week_start, timetable_date)
-        .await
-        .map_err(Error::TimeblockFetchError)?;
+    let time_blocks = fetch_timeblocks_of_day(app_repos, week_start, timetable_date).await?;
     let events = super::fetch_events(app_repos, timetable_date)
         .await
         .map_err(Error::EventFetchError)?;
@@ -148,7 +150,7 @@ pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<Dail
         .collect::<Result<Vec<_>, _>>()
         .map_err(Error::SubjectEventTimeblockMergeError)?;
 
-    let daily_time_blocks = super::trim_timetable_on_ends(daily_time_blocks);
+    let daily_time_blocks = super::trim_timetable(daily_time_blocks);
 
     let day_of_week = timetable_date.format("%A").to_string();
 

@@ -1,4 +1,4 @@
-use chrono::{Datelike, NaiveDate, NaiveTime};
+use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
 use itertools::Itertools;
 use serde::Serialize;
 use thiserror::Error;
@@ -7,28 +7,43 @@ use crate::repositories::{
     self,
     calendar::{Month, Year},
     events::Event,
-    timetable::{TimeBlock, TimeBlocks, WeekStart},
+    timetable::TimeBlock,
     AppRepositories,
 };
 
 pub mod daily_timetable;
+pub mod full_timetable;
 
 // Private error type for shared functions in the timetable module
 #[derive(Error, Debug)]
-enum Error {
+pub enum Error {
     #[error("event fetch error")]
     EventFetchError(#[source] repositories::events::Error),
     #[error("failed to fetch calendar")]
     CalendarFetchError(#[source] repositories::calendar::Error),
-    #[error("timetable fetch error")]
-    TimetableFetchError(#[source] repositories::timetable::Error),
-    #[error("lessons for needed timetable date not found")]
-    LessonsForDateNotFound,
-    #[error("failed to parse event or lesson time")]
-    TimeParseError(#[source] chrono::ParseError),
+    #[error("failed to parse lesson time")]
+    TimeBlockTimeParseError(#[source] chrono::ParseError),
+    #[error("failed to parse lesson time")]
+    EventTimeParseError(#[source] chrono::ParseError),
 }
 
 const YMD_FORMAT: &str = "%Y-%m-%d";
+
+trait WeekOpExt {
+    fn is_weekend(&self) -> bool;
+
+    fn week_start(&self) -> Self;
+}
+
+impl WeekOpExt for NaiveDate {
+    fn is_weekend(&self) -> bool {
+        self.weekday().number_from_monday() >= Weekday::Sat.number_from_monday()
+    }
+
+    fn week_start(&self) -> NaiveDate {
+        self.week(Weekday::Mon).first_day()
+    }
+}
 
 enum EventTimeblockMatchingStatus {
     Matching,
@@ -39,9 +54,9 @@ enum EventTimeblockMatchingStatus {
 impl EventTimeblockMatchingStatus {
     fn check(event: &Event, time_block: &TimeBlock) -> Result<Self, Error> {
         let time_from = NaiveTime::parse_from_str(&event.time_from, "%H:%M:%S")
-            .map_err(Error::TimeParseError)?;
-        let time_to =
-            NaiveTime::parse_from_str(&event.time_to, "%H:%M:%S").map_err(Error::TimeParseError)?;
+            .map_err(Error::EventTimeParseError)?;
+        let time_to = NaiveTime::parse_from_str(&event.time_to, "%H:%M:%S")
+            .map_err(Error::EventTimeParseError)?;
         let status = time_block
             .first()
             .map(|t| {
@@ -51,7 +66,7 @@ impl EventTimeblockMatchingStatus {
                 ))
             })
             .transpose()
-            .map_err(Error::TimeParseError)?
+            .map_err(Error::TimeBlockTimeParseError)?
             .map(|(timeblock_time_from, timeblock_time_to)| {
                 match time_from == timeblock_time_from && time_to == timeblock_time_to {
                     true => Self::Matching,
@@ -129,26 +144,7 @@ async fn fetch_events(
         .map_err(Error::EventFetchError)
 }
 
-async fn fetch_timeblocks_of_day(
-    app_repos: &AppRepositories,
-    week_start: NaiveDate,
-    timetable_date: NaiveDate,
-) -> Result<TimeBlocks, Error> {
-    let timetable = app_repos
-        .timetables()
-        .timetable(WeekStart::new(week_start.format(YMD_FORMAT).to_string()))
-        .await
-        .map_err(Error::TimetableFetchError)?;
-
-    Ok(timetable
-        .inner_timetable
-        .into_iter()
-        .find(|day| day.date == timetable_date.format(YMD_FORMAT).to_string())
-        .ok_or(Error::LessonsForDateNotFound)?
-        .time_blocks)
-}
-
-fn trim_timetable_on_ends(
+fn trim_timetable(
     time_blocks: Vec<Option<SubjectEventTimeBlock>>,
 ) -> Vec<Option<SubjectEventTimeBlock>> {
     time_blocks
