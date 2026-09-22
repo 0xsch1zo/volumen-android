@@ -15,7 +15,7 @@ function HomePage({ }: Route.ComponentProps) {
             <GradeList />
             <LinkedHeader
                 title="Timetable"
-                destination="/temp"
+                destination="/timetable"
             />
             <DailyTimetable />
             <LinkedHeader

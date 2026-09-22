@@ -76,3 +76,10 @@ export interface ReceivedMessagePreviews {
     messages: Array<ReceivedMessagePreview>,
     total: number
 }
+
+export interface TimeBlock {
+    start: String,
+    end: String,
+    subject: String,
+    events: Array<Event>,
+}

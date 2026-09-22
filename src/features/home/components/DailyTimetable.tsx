@@ -3,9 +3,8 @@ import { useQuery } from "@tanstack/react-query"
 import { dailyTimetable } from "../api"
 import { M3eDivider } from "@m3e/react/divider"
 import { DailyTimetable as DailyTimetableDto } from "../types"
-import { Event } from "../../../types"
-import { M3eChip } from "@m3e/react/chips"
 import style from "./DailyTimetable.module.css"
+import EventList from "../../../components/EventList"
 
 function DailyTimetable() {
     const { isLoading, error, data } = useQuery({
@@ -121,19 +120,6 @@ function SubjectEventList({ timetable }: { timetable: DailyTimetableDto }) {
             }
         </div>
     )
-}
-
-function EventList({ events }: { events: Array<Event> }) {
-    return (
-        <>
-            {[...events.entries().map(([_, e], i) =>
-                <M3eChip key={i} className={style.eventChip} variant="elevated">
-                    {e.category.name}
-                </M3eChip>)]
-            }
-        </>
-    )
-
 }
 
 export default DailyTimetable

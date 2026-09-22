@@ -18,7 +18,7 @@ function Item({ leading, header, title, subtitle, trailing, onAction }: ItemProp
     return (
         <M3eCard
             orientation="horizontal"
-            variant="filled"
+            variant="outlined"
             actionable
             onClick={() => {
                 if (onAction !== undefined) {

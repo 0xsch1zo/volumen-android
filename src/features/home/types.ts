@@ -1,11 +1,4 @@
-import { Event } from "../../types"
-
-export interface TimeBlock {
-    start: String,
-    end: String,
-    subject: String,
-    events: Array<Event>,
-}
+import { TimeBlock } from "../../types"
 
 export interface DailyTimetable {
     day_of_week: String,

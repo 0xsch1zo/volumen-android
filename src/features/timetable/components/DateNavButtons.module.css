@@ -1,0 +1,9 @@
+.container {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    min-height: 3rem;
+    height: 3rem;
+    max-height: 3rem;
+    margin: 0rem 1rem;
+}

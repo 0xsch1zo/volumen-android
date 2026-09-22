@@ -1,6 +1,6 @@
 import { M3eAvatar } from "@m3e/react/avatar"
 import styles from "./AccountsList.module.css"
-import chevronRight from "../assets/chevron_right.svg";
+import chevronRight from "../../../assets/chevrons/chevron_right.svg";
 import { Account } from "../../../types";
 import CardList from "../../../components/CardList";
 import { selectAccount } from "../api";

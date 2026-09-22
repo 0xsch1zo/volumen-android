@@ -1,0 +1,9 @@
+.subjectEventContainer {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+.list {
+    margin: 0rem 2rem;
+}
