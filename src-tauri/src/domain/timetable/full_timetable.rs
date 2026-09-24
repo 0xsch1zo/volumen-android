@@ -66,12 +66,14 @@ pub async fn full_timetable_usecase(
                 .map(|time_block| SubjectEventTimeBlock::merge_from(time_block, &events, date))
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(Error::SubjectEventTimeblockMergeError)?;
+            let time_blocks = super::trim_timeblocks(time_blocks);
             Ok(Day {
                 date: day.date,
                 time_blocks,
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
+
     Ok(Timetable {
         date: date.format(YMD_FORMAT).to_string(),
         days,

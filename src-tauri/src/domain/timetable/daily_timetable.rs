@@ -150,7 +150,7 @@ pub async fn daily_timetable_usecase(app_repos: &AppRepositories) -> Result<Dail
         .collect::<Result<Vec<_>, _>>()
         .map_err(Error::SubjectEventTimeblockMergeError)?;
 
-    let daily_time_blocks = super::trim_timetable(daily_time_blocks);
+    let daily_time_blocks = super::trim_timeblocks(daily_time_blocks);
 
     let day_of_week = timetable_date.format("%A").to_string();
 

@@ -53,6 +53,7 @@ enum EventTimeblockMatchingStatus {
 
 impl EventTimeblockMatchingStatus {
     fn check(event: &Event, time_block: &TimeBlock) -> Result<Self, Error> {
+        // TODO: maybe parse as %H:%M to be sure
         let time_from = NaiveTime::parse_from_str(&event.time_from, "%H:%M:%S")
             .map_err(Error::EventTimeParseError)?;
         let time_to = NaiveTime::parse_from_str(&event.time_to, "%H:%M:%S")
@@ -144,7 +145,7 @@ async fn fetch_events(
         .map_err(Error::EventFetchError)
 }
 
-fn trim_timetable(
+fn trim_timeblocks(
     time_blocks: Vec<Option<SubjectEventTimeBlock>>,
 ) -> Vec<Option<SubjectEventTimeBlock>> {
     time_blocks
