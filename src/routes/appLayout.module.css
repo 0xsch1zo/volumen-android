@@ -14,8 +14,9 @@
 }
 
 .outletContainer {
+    display: flex;
     flex-grow: 1;
-    overflow: scroll;
+    overflow: auto;
 }
 
 .barInsetFiller {

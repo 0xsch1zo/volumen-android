@@ -5,5 +5,20 @@
 }
 
 .list {
-    margin: 0rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 1rem 2rem;
+}
+
+.card {
+    padding: 0.625rem 1rem;
+}
+
+.emptyCard {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    height: 4rem;
 }

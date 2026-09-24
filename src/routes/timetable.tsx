@@ -5,12 +5,9 @@ import TimeblockList from "../features/timetable/components/TimeblockList"
 import { Timetable } from "../features/timetable/types"
 import { queryClient } from "../root"
 import type { Route } from "./+types/timetable"
+import style from "./timetable.module.css";
 
-type LoaderData = {
-    timetable: Timetable,
-}
-
-async function clientLoader(): Promise<LoaderData> {
+async function clientLoader(): Promise<Timetable> {
     return await queryClient.ensureQueryData({
         queryKey: ["fullTimetable"],
         queryFn: async () => await full_timetable(null),
@@ -18,15 +15,16 @@ async function clientLoader(): Promise<LoaderData> {
 }
 
 function TimetablePage({ loaderData }: Route.ComponentProps) {
-    // I dont' know what the hell is happening with this but right now it works
     let timetable = loaderData
     console.log(loaderData)
     let current_date = new Date(Date.parse(timetable.date))
-    return <>
+    return <div className={style.pageContainer}>
         <DateNavButtons current_date={current_date} />
-        <TimeblockList day={timetable.days[current_date.getDay()]} />
+        <div className={style.timeblockListContainer}>
+            <TimeblockList day={timetable.days.find((day) => day.date == timetable.date)!} />
+        </div>
         <PeriodSwitch />
-    </>
+    </div>
 }
 
 export { clientLoader }

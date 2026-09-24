@@ -1,7 +1,8 @@
 .dashboardContainer {
     display: flex;
     flex-direction: column;
-    overflow: scroll;
+    overflow: auto;
     padding: 0rem 1rem;
     margin-bottom: 1rem;
+    width: 100%;
 }
