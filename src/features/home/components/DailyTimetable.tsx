@@ -1,10 +1,12 @@
-import { M3eHeading } from "@m3e/react/heading"
-import { useQuery } from "@tanstack/react-query"
-import { dailyTimetable } from "../api"
-import { M3eDivider } from "@m3e/react/divider"
-import { DailyTimetable as DailyTimetableDto } from "../types"
-import style from "./DailyTimetable.module.css"
-import EventList from "../../../components/EventList"
+import { M3eHeading } from "@m3e/react/heading";
+import { useQuery } from "@tanstack/react-query";
+import { dailyTimetable } from "../api";
+import { M3eDivider } from "@m3e/react/divider";
+import { DailyTimetable as DailyTimetableDto } from "../types";
+import style from "./DailyTimetable.module.css";
+import EventList from "../../../components/EventList";
+import { M3eIcon } from "@m3e/react/icon";
+import "@m3e/icons/outlined/event_busy";
 
 function DailyTimetable() {
     const { isLoading, error, data } = useQuery({
@@ -42,6 +44,7 @@ function DailyTimetable() {
             timetableElement = <div className={style.emptyTimetableOuterBox}>
                 <div className={style.emptyTimetableInnerBox}>
                     <div className={style.emptyTimetableIcon} />
+                    <M3eIcon name="event_busy" />
                     <M3eHeading variant="title" size="medium">Timetable is empty</M3eHeading>
                 </div>
             </div >

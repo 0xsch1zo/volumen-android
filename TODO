@@ -2,3 +2,4 @@ dissallow selecting app text
 setup motion variables to not use hard coded values
 check referesh behaviour, because it might not work
 refactor messages, sent and received messages duplicate behaviour and types(archived probably too)
+multiple lessons in a timeblock aren't handled well enough

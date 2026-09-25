@@ -1,10 +1,11 @@
 import { M3eAvatar } from "@m3e/react/avatar"
 import styles from "./AccountsList.module.css"
-import chevronRight from "../../../assets/chevrons/chevron_right.svg";
 import { Account } from "../../../types";
 import CardList from "../../../components/CardList";
 import { selectAccount } from "../api";
 import { useNavigate } from "react-router";
+import "@m3e/icons/outlined/chevron_forward";
+import { M3eIcon } from "@m3e/react/icon";
 
 function AccountList({ accounts }: { accounts: Array<Account> }) {
     const navigate = useNavigate()
@@ -23,7 +24,7 @@ function AccountList({ accounts }: { accounts: Array<Account> }) {
                                 leading: <M3eAvatar>{monogram}</M3eAvatar>,
                                 title: account.student_name,
                                 subtitle: account.group,
-                                trailing: <img className={styles.accountCardChevron} src={chevronRight} />,
+                                trailing: <M3eIcon name="chevron_forward" className={styles.accountCardChevron} />,
                                 onAction: async () => {
                                     await selectAccount(account)
                                     navigate("/home", {

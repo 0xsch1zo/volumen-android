@@ -3,8 +3,9 @@ import { M3eAvatar } from "@m3e/react/avatar";
 import { M3eHeading } from "@m3e/react/heading";
 import { M3eIconButton } from "@m3e/react/icon-button";
 import { Account } from "../../../types";
-import menuSvg from "../assets//menu.svg"
 import style from "./AppBar.module.css"
+import "@m3e/icons/outlined/menu";
+import { M3eIcon } from "@m3e/react/icon";
 
 function AppBar({ account }: { account: Account }) {
     if (account.student_name.length == 0)
@@ -15,9 +16,8 @@ function AppBar({ account }: { account: Account }) {
         <M3eAppBar className={style.appBar}>
             <M3eIconButton
                 slot="leading-icon"
-                className={style.menuIcon}
             >
-                <img src={menuSvg} />
+                <M3eIcon name="menu" />
             </M3eIconButton>
             <M3eHeading
                 size="large"

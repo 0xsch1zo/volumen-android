@@ -1,8 +1,9 @@
-import { M3eHeading } from "@m3e/react/heading"
-import { M3eIconButton } from "@m3e/react/icon-button"
-import { useNavigate } from "react-router"
-import arrowForwardIcon from "../assets/arrowForward.svg"
-import style from "./LinkedHeader.module.css"
+import { M3eHeading } from "@m3e/react/heading";
+import { M3eIconButton } from "@m3e/react/icon-button";
+import { useNavigate } from "react-router";
+import style from "./LinkedHeader.module.css";
+import "@m3e/icons/outlined/arrow_forward";
+import { M3eIcon } from "@m3e/react/icon";
 
 function LinkedHeader({ title, destination }: { title: string, destination: string }) {
     const navigate = useNavigate()
@@ -16,7 +17,7 @@ function LinkedHeader({ title, destination }: { title: string, destination: stri
                 {title}
             </M3eHeading>
             <M3eIconButton onClick={() => navigate(destination)}>
-                <img src={arrowForwardIcon} />
+                <M3eIcon name="arrow_forward" />
             </M3eIconButton>
         </div>
     )
