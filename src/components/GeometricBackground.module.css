@@ -1,3 +1,23 @@
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes spin-reverse {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(-360deg);
+    }
+}
+
 .container {
     background-color: var(--md-sys-color-background);
     position: absolute;
@@ -26,6 +46,7 @@
     mask-repeat: inherit;
     top: 5dvh;
     left: -45dvw;
+    animation: spin 120s linear infinite;
 }
 
 .nineSidedCookie {
@@ -38,6 +59,7 @@
     mask-repeat: inherit;
     bottom: -20dvh;
     left: -25dvw;
+    animation: spin-reverse 120s linear infinite;
 }
 
 .circle {
@@ -62,4 +84,5 @@
     mask-repeat: inherit;
     bottom: 12dvh;
     right: -20dvw;
+    animation: spin 60s linear infinite;
 }
