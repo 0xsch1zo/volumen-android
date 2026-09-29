@@ -83,3 +83,55 @@ export interface TimeBlock {
     subject: String,
     events: Array<Event>,
 }
+// new:
+export interface SentMessagePreview {
+    message_id: number,
+    receiver_name: string,
+    topic: string,
+    fragment: string,
+    send_date: string,
+    has_file_attachment: boolean,
+}
+
+export interface SentMessagePreviews {
+    messages: Array<SentMessagePreview>,
+    total: number,
+}
+
+export interface AttachmentReference {
+    id: number,
+    filename: string,
+}
+
+export interface MessageReceiver {
+    receiver_id: number,
+    name: string,
+    read_date: string,
+}
+
+export interface ReceivedMessage {
+    message_id: number,
+    sender_name: string,
+    sender_id: number,   // for reply
+    topic: string,
+    message: string,
+    send_date: string,
+    read_date?: string | null,
+    no_reply: boolean,
+    is_archived: boolean,
+    attachments: Array<AttachmentReference>,
+    receivers: Array<MessageReceiver>,
+}
+
+export interface SentMessage {
+    message_id: number,
+    sender_name: string,
+    topic: string,
+    message: string,
+    send_date: string,
+    read_date?: string | null,
+    no_reply: boolean,
+    is_archived: boolean,
+    attachments: Array<AttachmentReference>,
+    receivers: Array<MessageReceiver>,
+}

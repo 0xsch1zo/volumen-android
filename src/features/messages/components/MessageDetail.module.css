@@ -1,0 +1,70 @@
+.detail {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.5rem 1rem 2rem;
+}
+
+.back {
+    border: 0;
+    background: transparent;
+    padding: 0.5rem 0;
+    color: var(--md-sys-color-primary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.header h1 {
+    margin: 0.75rem 0 0.5rem;
+    font-size: 1.4rem;
+}
+
+.meta {
+    margin: 0.2rem 0;
+    color: var(--md-sys-color-on-surface-variant);
+}
+
+.body {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border-radius: 1rem;
+    background: var(--md-sys-color-surface-container);
+    color: var(--md-sys-color-on-surface);
+    line-height: 1.55;
+}
+
+.attachments {
+    margin-top: 1.25rem;
+}
+
+.attachments h2 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.attachment {
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.loading {
+    width: 100%;
+    padding: 2rem 1rem;
+    box-sizing: border-box;
+    text-align: center;
+    color: var(--md-sys-color-on-surface-variant);
+}
+
+
+.reply {
+    margin-top: 1.25rem;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.7rem 1.1rem;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+}

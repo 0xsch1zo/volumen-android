@@ -1,0 +1,20 @@
+.tabs {
+    display: flex;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+    margin-bottom: 1rem;
+}
+
+.tab {
+    flex: 1;
+    padding: 0.85rem 1rem;
+    text-align: center;
+    text-decoration: none;
+    color: var(--md-sys-color-on-surface-variant);
+    font-weight: 600;
+    border-bottom: 2px solid transparent;
+}
+
+.active {
+    color: var(--md-sys-color-primary);
+    border-bottom-color: var(--md-sys-color-primary);
+}
