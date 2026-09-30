@@ -5,14 +5,26 @@ import "@m3e/icons/outlined/home";
 import "@m3e/icons/outlined/looks_6";
 import "@m3e/icons/outlined/calendar_today";
 import "@m3e/icons/outlined/mail";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import React, { useEffect, useRef } from "react";
 
-//TODO: initial selection state
 
-function NavItem({ name, path, icon }: { name: string, path: string, icon: React.ReactElement }) {
+// FIXME: the navbar doesn't reflect the state of the location when navigaating wihout it(scroll for example)
+
+function NavItem({ name, path, icon, initialySelected = false }: { name: string, path: string, icon: React.ReactElement, initialySelected?: boolean }) {
     let ref = useRef<M3eNavItemElement>(null);
     const navigate = useNavigate()
+    let selected = useRef<boolean>(false)
+    useEffect(
+        () => {
+            if (selected !== undefined)
+                selected.current = initialySelected
+            if (ref.current !== null)
+                ref.current.selected = initialySelected
+        },
+        []
+    )
+
     useEffect(
         () => ref.current?.addEventListener(
             "change",
@@ -21,38 +33,66 @@ function NavItem({ name, path, icon }: { name: string, path: string, icon: React
         [navigate]
     )
 
-    return <M3eNavItem ref={ref}>
+    return <M3eNavItem key={path} ref={ref}>
         {icon}
         {name}
     </M3eNavItem>
+}
 
+type Item = {
+    name: string,
+    key: string,
+    path: string,
+    icon: React.ReactElement,
+    initialySelected?: boolean,
 }
 
 function NavBar() {
+    let itemMap = new Map<string, Item>([
+        ["/home", {
+            name: "Home",
+            key: "home",
+            path: "/home",
+            icon: < M3eIcon slot="icon" name="home" />,
+        }],
+        ["/grades", {
+            name: "Grades",
+            key: "grades",
+            path: "/grades",
+            icon: < M3eIcon slot="icon" name="looks_6" />,
+        }],
+        ["/timetable", {
+            name: "Timetable",
+            key: "timetable",
+            path: "/timetable",
+            icon: < M3eIcon slot="icon" name="calendar_today" />,
+        }],
+        ["/messages", {
+            name: "Messages",
+            key: "messages",
+            path: "/messages",
+            icon: < M3eIcon slot="icon" name="mail" />,
+        }]
+    ])
+
+    const path = useLocation().pathname
+    itemMap.get(path)!.initialySelected = true
+
+
+    console.log(itemMap.values())
     // we need to set the first element to slected on page load 
     return (
         <M3eNavBar className={style.navBar}>
-            <NavItem
-                name="Home"
-                path="/home"
-                icon={<M3eIcon slot="icon" name="home" />}
-            />
-
-            <NavItem
-                name="Grades"
-                path="/grades"
-                icon={<M3eIcon slot="icon" name="looks_6" />}
-            />
-            <NavItem
-                name="Timetable"
-                path="/timetable"
-                icon={<M3eIcon slot="icon" name="calendar_today" />}
-            />
-            <NavItem
-                name="Messages"
-                path="/messages"
-                icon={<M3eIcon slot="icon" name="mail" />}
-            />
+            {[
+                itemMap.values().map(
+                    (item) => <NavItem
+                        name={item.name}
+                        key={item.key}
+                        path={item.path}
+                        icon={item.icon}
+                        initialySelected={item.initialySelected}
+                    />)
+            ]}
         </M3eNavBar>
     )
 }
