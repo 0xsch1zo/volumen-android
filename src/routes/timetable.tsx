@@ -16,7 +16,6 @@ async function clientLoader(): Promise<Timetable> {
 
 function TimetablePage({ loaderData }: Route.ComponentProps) {
     let timetable = loaderData
-    console.log(loaderData)
     let current_date = new Date(Date.parse(timetable.date))
     return <div className={style.pageContainer}>
         <DateNavButtons current_date={current_date} />
