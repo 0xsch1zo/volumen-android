@@ -2,14 +2,31 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    padding: 0rem;
-
-width: 25rem;
-height: 34.5rem;
 }
+
 .content {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    padding: 0rem;
+}
+
+.item {
+    padding: 0.625rem 1.5rem;
+    /* TODO: use padding variables from m3e which seem not to work for now *?
+    /*--m3e-list-item-leading-space: 1.5rem;
+    --m3e-list-item-trailing-space: 1.5rem;
+    --m3e-list-item-three-line-top-space: 0.625rem;
+    --m3e-list-item-three-line-bottom-space: 0.625rem;*/
+}
+
+.header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    --m3e-list-item-font-weight: bold;
+}
+
+.date {
+    margin-left: 1rem;
 }
