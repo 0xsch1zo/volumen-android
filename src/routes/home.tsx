@@ -20,7 +20,7 @@ function HomePage({ }: Route.ComponentProps) {
             <DailyTimetable />
             <LinkedHeader
                 title="Messages"
-                destination="/temp"
+                destination="/messages"
             />
             <MessageList />
         </div>

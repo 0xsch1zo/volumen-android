@@ -75,11 +75,13 @@ function NavBar() {
         }]
     ])
 
-    const path = useLocation().pathname
-    itemMap.get(path)!.initialySelected = true
+    let location = useLocation()
+    useEffect(() => {
+        console.log(location)
+        itemMap.get(location.pathname)!.initialySelected = true
+    }, [location, itemMap])
 
 
-    console.log(itemMap.values())
     // we need to set the first element to slected on page load 
     return (
         <M3eNavBar className={style.navBar}>

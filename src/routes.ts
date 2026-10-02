@@ -16,6 +16,7 @@ export default [
                 route("home", "./routes/home.tsx"),
                 route("grades", "./routes/grades.tsx"),
                 route("timetable", "./routes/timetable.tsx"),
+                route("messages", "./routes/messages.tsx")
             ])
         ]),
     ])
