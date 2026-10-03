@@ -33,7 +33,6 @@ impl SubjectId {
 pub struct Subject {
     pub id: SubjectId,
     pub name: String,
-    pub short: String,
     pub is_extracurricular: bool,
 }
 

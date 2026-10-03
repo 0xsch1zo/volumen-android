@@ -76,11 +76,7 @@ function NavBar() {
     ])
 
     let location = useLocation()
-    useEffect(() => {
-        console.log(location)
-        itemMap.get(location.pathname)!.initialySelected = true
-    }, [location, itemMap])
-
+    itemMap.get(location.pathname)!.initialySelected = true
 
     // we need to set the first element to slected on page load 
     return (

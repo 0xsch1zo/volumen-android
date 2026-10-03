@@ -153,7 +153,7 @@ impl AuthenticatedSynergiaEndpoints {
                 SYNERGIA_URL.join("/gateway/api/2.0/Users").unwrap()
             }
             AuthenticatedSynergiaEndpoints::Subjects => {
-                SYNERGIA_URL.join("/gateway/api/2.0/Subjects").unwrap()
+                SYNERGIA_URL.join("/gateway/api/2.0/Auth/Subjects").unwrap()
             }
             AuthenticatedSynergiaEndpoints::Timetable { week_start } => SYNERGIA_URL
                 .join(&format!(
