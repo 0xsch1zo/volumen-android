@@ -27,11 +27,7 @@ impl TryFrom<SentMessagePreview> for models::SentMessagePreview {
             .message_id
             .try_into()
             .map_err(MessageModelConversionError::MessageIdParsingError)?;
-        let fragment = BASE64_STANDARD
-            .decode(value.fragment.0)
-            .map_err(MessageModelConversionError::ContentDecodingError)?;
-        let fragment =
-            String::from_utf8(fragment).map_err(MessageModelConversionError::ContentUtf8Error)?;
+        let fragment = value.fragment.to_string_lossy()?;
 
         Ok(Self {
             message_id,
@@ -103,11 +99,7 @@ impl TryFrom<SentMessage> for models::SentMessage {
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
 
-        let message = BASE64_STANDARD
-            .decode(value.message.0)
-            .map_err(MessageModelConversionError::ContentDecodingError)?;
-        let message =
-            String::from_utf8(message).map_err(MessageModelConversionError::ContentUtf8Error)?;
+        let message = value.message.to_string_lossy()?;
 
         Ok(Self {
             message_id,
