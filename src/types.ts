@@ -74,7 +74,22 @@ export interface ReceivedMessagePreview {
 
 export interface ReceivedMessagePreviews {
     messages: Array<ReceivedMessagePreview>,
-    total: number
+    total: number,
+}
+
+export interface SentMessagePreview {
+    // FIXME: change the name of this field to reflect the rest
+    message_id: number,
+    receiver_name: string,
+    topic: string,
+    fragment: string,
+    send_date: string,
+    has_file_attachment: boolean,
+}
+
+export interface SentMessagePreviews {
+    messages: Array<SentMessagePreview>,
+    total: number,
 }
 
 export interface TimeBlock {
