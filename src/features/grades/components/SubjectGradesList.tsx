@@ -9,7 +9,7 @@ import { subjectGradesList } from "../api";
 import styles from "./SubjectGradesList.module.css";
 
 function GradeChipList({ grades }: { grades: Array<Grade> }) {
-    const grades_val = grades.map(grade => grade.grade)
+    let grades_val = grades.map(grade => grade.grade)
     let element;
 
     if (grades_val.length != 0) {
