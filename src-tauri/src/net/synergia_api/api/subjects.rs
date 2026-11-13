@@ -19,33 +19,30 @@ impl From<SubjectId> for models::SubjectId {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "PascalCase")]
+#[serde(rename_all = "camelCase")]
 pub(super) struct Subject {
-    id: SubjectId,
+    numeric_identifier: SubjectId,
     name: String,
-    short: String,
-    is_extracurricular: bool,
+    extracurricular: bool,
 }
 
 impl From<Subject> for models::Subject {
     fn from(value: Subject) -> Self {
         Self {
-            id: value.id.into(),
+            id: value.numeric_identifier.into(),
             name: value.name,
-            short: value.short,
-            is_extracurricular: value.is_extracurricular,
+            is_extracurricular: value.extracurricular,
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "PascalCase")]
 pub struct SubjectsResponse {
-    subjects: Vec<Subject>,
+    data: Vec<Subject>,
 }
 
 impl From<SubjectsResponse> for models::Subjects {
     fn from(value: SubjectsResponse) -> Self {
-        value.subjects.into_iter().map(Into::into).collect()
+        value.data.into_iter().map(Into::into).collect()
     }
 }

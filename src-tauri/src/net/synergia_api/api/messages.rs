@@ -1,6 +1,6 @@
-use std::{num::ParseIntError, string::FromUtf8Error};
+use std::num::ParseIntError;
 
-use base64::DecodeError;
+use base64::{prelude::BASE64_STANDARD, DecodeError, Engine};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -19,8 +19,6 @@ pub enum MessageModelConversionError {
     ReceiverIdParsingError(#[source] ParseIntError),
     #[error("failed to decode message contents from base64")]
     ContentDecodingError(#[source] DecodeError),
-    #[error("failed to convert messages contents to string due to invalid utf-8")]
-    ContentUtf8Error(#[source] FromUtf8Error),
 }
 
 #[derive(Deserialize, Debug)]
@@ -38,6 +36,17 @@ impl TryFrom<MessageId> for models::MessageId {
 #[derive(Deserialize, Debug)]
 #[serde(transparent)]
 pub struct Base64String(String);
+
+impl Base64String {
+    pub fn to_string_lossy(&self) -> Result<String, MessageModelConversionError> {
+        Ok(String::from_utf8_lossy(
+            &BASE64_STANDARD
+                .decode(&self.0)
+                .map_err(MessageModelConversionError::ContentDecodingError)?,
+        )
+        .to_string())
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(transparent)]
