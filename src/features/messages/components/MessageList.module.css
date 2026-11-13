@@ -12,11 +12,6 @@
 
 .item {
     padding: 0.625rem 1.5rem;
-    /* TODO: use padding variables from m3e which seem not to work for now *?
-    /*--m3e-list-item-leading-space: 1.5rem;
-    --m3e-list-item-trailing-space: 1.5rem;
-    --m3e-list-item-three-line-top-space: 0.625rem;
-    --m3e-list-item-three-line-bottom-space: 0.625rem;*/
 }
 
 .header {

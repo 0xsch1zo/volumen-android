@@ -12,9 +12,9 @@ function GradeChipList({ grades }: { grades: Array<Grade> }) {
     let grades_val = grades.map(grade => grade.grade)
     let element;
 
-    if (grades_val.length != 0) {
+    if (grades.length != 0) {
         element = <M3eChipSet className={styles.gradeChipList}>
-            {grades_val.map(grade => <M3eChip className={styles.gradeChip}><M3eHeading variant="title" size="medium">{grade}</M3eHeading></M3eChip>)}
+            {grades.map(grade => <M3eChip className={styles.gradeChip}><M3eHeading variant="title" size="medium">{grade.grade}</M3eHeading></M3eChip>)}
         </M3eChipSet>
     } else {
         element = <div className={styles.emptySubjectGrades}><M3eHeading variant="label" size="medium">-</M3eHeading></div>
